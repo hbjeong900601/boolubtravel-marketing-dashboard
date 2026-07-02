@@ -9,6 +9,13 @@ let API_BASE = localStorage.getItem('boolub_backend_url') ||
     ? 'http://localhost:3000'
     : window.location.origin);
 
+if (API_BASE && API_BASE.endsWith('/')) {
+  API_BASE = API_BASE.slice(0, -1);
+}
+if (API_BASE && !/^https?:\/\//i.test(API_BASE) && API_BASE !== 'http://localhost:3000' && API_BASE !== window.location.origin) {
+  API_BASE = 'https://' + API_BASE;
+}
+
 // State management
 let state = {
   products: [],
@@ -1108,7 +1115,7 @@ window.saveKeywordBid = async function(keywordId) {
 async function handleSaveSettings(e) {
   e.preventDefault();
 
-  const backendUrl = elements.settingsBackendUrl.value.trim();
+  let backendUrl = elements.settingsBackendUrl.value.trim();
   const customerId = elements.settingsCustomerId.value.trim();
   const apiKey = elements.settingsApiKey.value.trim();
   const apiSecret = elements.settingsApiSecret.value.trim();
@@ -1116,6 +1123,14 @@ async function handleSaveSettings(e) {
 
   // Save backend URL to localStorage
   if (backendUrl) {
+    // Sanitize trailing slash
+    if (backendUrl.endsWith('/')) {
+      backendUrl = backendUrl.slice(0, -1);
+    }
+    // Sanitize protocol
+    if (!/^https?:\/\//i.test(backendUrl)) {
+      backendUrl = 'https://' + backendUrl;
+    }
     localStorage.setItem('boolub_backend_url', backendUrl);
     API_BASE = backendUrl;
   } else {
