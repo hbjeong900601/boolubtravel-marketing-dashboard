@@ -7,7 +7,7 @@
 let API_BASE = localStorage.getItem('boolub_backend_url') || 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
-    : window.location.origin);
+    : 'https://boolubtravel-marketing-backend.je3899.workers.dev');
 
 if (API_BASE && API_BASE.endsWith('/')) {
   API_BASE = API_BASE.slice(0, -1);
