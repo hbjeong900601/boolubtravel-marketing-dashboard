@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 // Naver Search Ad API base URL
-const NAVER_API_BASE_URL = 'https://api.naver.com';
+const NAVER_API_BASE_URL = 'https://api.searchad.naver.com';
 
 /**
  * Generates the headers required for Naver Search Ad API.

@@ -436,7 +436,7 @@ async function proxyNaverAds(method, path, queryParams, body, settings) {
   }
 
   try {
-    const res = await fetch(`https://api.naver.com${path}${queryStr}`, {
+    const res = await fetch(`https://api.searchad.naver.com${path}${queryStr}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : null
