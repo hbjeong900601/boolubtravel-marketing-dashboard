@@ -1,4 +1,4 @@
-name = "burob-travel-marketing-backend"
+name = "boolubtravel-marketing-backend"
 main = "backend/worker.js"
 compatibility_date = "2024-03-01"
 
@@ -6,7 +6,7 @@ compatibility_date = "2024-03-01"
 NODE_ENV = "production"
 
 # Bind a KV Namespace if the user wants persistence in production.
-# To create a KV namespace: wrangler kv:namespace create BUROB_DB
+# To create a KV namespace: wrangler kv:namespace create BOOLUB_DB
 # [[kv_namespaces]]
-# binding = "BUROB_DB"
+# binding = "BOOLUB_DB"
 # id = "your-kv-namespace-id"

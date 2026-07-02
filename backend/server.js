@@ -236,5 +236,5 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Burob Travel Ad Dashboard server is running on http://localhost:${PORT}`);
+  console.log(`Boolub Travel Ad Dashboard server is running on http://localhost:${PORT}`);
 });

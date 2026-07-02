@@ -4,7 +4,7 @@
  */
 
 // Dynamically resolve backend API URL
-let API_BASE = localStorage.getItem('burob_backend_url') || 
+let API_BASE = localStorage.getItem('boolub_backend_url') || 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
     : window.location.origin);
@@ -280,7 +280,7 @@ async function runGlobalSync() {
 async function fetchSettings() {
   try {
     // Prefill backend URL input from localStorage
-    elements.settingsBackendUrl.value = localStorage.getItem('burob_backend_url') || '';
+    elements.settingsBackendUrl.value = localStorage.getItem('boolub_backend_url') || '';
 
     const res = await fetch(`${API_BASE}/api/naver-ads/settings`);
     state.settings = await res.json();
@@ -566,14 +566,14 @@ function getMinCompetitorPrice(product) {
 function getMinPriceDiff(product) {
   const minPrice = getMinCompetitorPrice(product);
   if (!minPrice) return 0;
-  return product.price - minPrice; // negative means Burob is cheaper
+  return product.price - minPrice; // negative means Boolub is cheaper
 }
 
 function isCompetitive(product) {
   if (!product.competitors || product.competitors.length === 0) return 'NONE';
   const diff = getMinPriceDiff(product);
-  if (diff < -5000) return 'BEST'; // Burob cheaper by > 5,000 won
-  if (diff > 5000) return 'HIGH';  // Burob more expensive by > 5,000 won
+  if (diff < -5000) return 'BEST'; // Boolub cheaper by > 5,000 won
+  if (diff > 5000) return 'HIGH';  // Boolub more expensive by > 5,000 won
   return 'NEUTRAL';
 }
 
@@ -672,7 +672,7 @@ function drawCompetitorPriceChart(product) {
   // Build chart labels & data
   const labels = ['부럽트래블'];
   const prices = [product.price];
-  const colors = ['#00e676']; // green for Burob
+  const colors = ['#00e676']; // green for Boolub
 
   if (product.competitors && product.competitors.length > 0) {
     product.competitors.forEach(c => {
@@ -1116,10 +1116,10 @@ async function handleSaveSettings(e) {
 
   // Save backend URL to localStorage
   if (backendUrl) {
-    localStorage.setItem('burob_backend_url', backendUrl);
+    localStorage.setItem('boolub_backend_url', backendUrl);
     API_BASE = backendUrl;
   } else {
-    localStorage.removeItem('burob_backend_url');
+    localStorage.removeItem('boolub_backend_url');
     API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? 'http://localhost:3000'
       : window.location.origin;
@@ -1165,7 +1165,7 @@ async function handleClearSettings() {
   showLoader('초기화 및 연동 해제 진행 중...');
 
   // Reset backend URL in local storage
-  localStorage.removeItem('burob_backend_url');
+  localStorage.removeItem('boolub_backend_url');
   elements.settingsBackendUrl.value = '';
   API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'

@@ -23,7 +23,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --name burob-travel-marketing-backend
+          command: deploy --name boolubtravel-marketing-backend
 
   deploy-frontend:
     runs-on: ubuntu-latest
@@ -37,4 +37,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy frontend --project-name=burob-travel-marketing-dashboard
+          command: pages deploy frontend --project-name=boolubtravel-marketing-dashboard

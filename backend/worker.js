@@ -1,5 +1,5 @@
 /**
- * Burob Travel Marketing Dashboard - Cloudflare Workers Backend
+ * Boolub Travel Marketing Dashboard - Cloudflare Workers Backend
  * Exposes APIs for Naver Search Ad HMAC signing, proxies, and Naver Shopping Crawler.
  */
 
@@ -229,16 +229,16 @@ export default {
 // -------------------------------------------------------------
 
 async function getDB(env) {
-  if (env.BUROB_DB) {
-    const raw = await env.BUROB_DB.get('database');
+  if (env.BOOLUB_DB) {
+    const raw = await env.BOOLUB_DB.get('database');
     if (raw) return JSON.parse(raw);
   }
   return initialDB;
 }
 
 async function saveDB(data, env) {
-  if (env.BUROB_DB) {
-    await env.BUROB_DB.put('database', JSON.stringify(data));
+  if (env.BOOLUB_DB) {
+    await env.BOOLUB_DB.put('database', JSON.stringify(data));
   } else {
     initialDB = data;
   }

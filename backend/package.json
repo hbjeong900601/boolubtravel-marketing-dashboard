@@ -1,7 +1,7 @@
 {
-  "name": "burob-travel-marketing-backend",
+  "name": "boolubtravel-marketing-backend",
   "version": "1.0.0",
-  "description": "Marketing Dashboard Backend for Burob Travel",
+  "description": "Marketing Dashboard Backend for Boolub Travel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
