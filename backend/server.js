@@ -1,0 +1,240 @@
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config();
+
+const { scrapeNaverShopping } = require('./crawler');
+const NaverAdsAPI = require('./naver-ads');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DB_PATH = path.join(__dirname, 'database.json');
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// DB Helper Functions
+function getDB() {
+  try {
+    const raw = fs.readFileSync(DB_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Failed to read database.json:', err);
+    return { products: [], naverAdsSettings: {} };
+  }
+}
+
+function saveDB(data) {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Failed to save database.json:', err);
+    return false;
+  }
+}
+
+// Initialize Naver Ad API Helper
+const adApi = new NaverAdsAPI(getDB());
+
+// -------------------------------------------------------------
+// 1. PRODUCT & COMPETITOR ROUTES
+// -------------------------------------------------------------
+
+// Get all products and competitor match status
+app.get('/api/products', (req, res) => {
+  const db = getDB();
+  res.json(db.products || []);
+});
+
+// Add new product
+app.post('/api/products', (req, res) => {
+  const db = getDB();
+  const { name, price, marginRate, keywords } = req.body;
+
+  if (!name || !price || !keywords) {
+    return res.status(400).json({ error: 'Name, price, and keywords are required.' });
+  }
+
+  const newProduct = {
+    id: `prod-${Date.now()}`,
+    name,
+    price: parseInt(price, 10),
+    marginRate: parseFloat(marginRate || 0.2),
+    keywords: Array.isArray(keywords) ? keywords : keywords.split(',').map(k => k.trim()),
+    competitors: [],
+    lastCrawled: null
+  };
+
+  db.products.push(newProduct);
+  saveDB(db);
+  
+  res.status(201).json(newProduct);
+});
+
+// Delete a product
+app.delete('/api/products/:id', (req, res) => {
+  const db = getDB();
+  const productIndex = db.products.findIndex(p => p.id === req.params.id);
+
+  if (productIndex === -1) {
+    return res.status(404).json({ error: 'Product not found.' });
+  }
+
+  db.products.splice(productIndex, 1);
+  saveDB(db);
+
+  res.json({ message: 'Product deleted successfully.' });
+});
+
+// Trigger crawler and update competitor match prices
+app.post('/api/crawler/match', async (req, res) => {
+  const { productId, keyword } = req.body;
+
+  if (!productId) {
+    return res.status(400).json({ error: 'Product ID is required.' });
+  }
+
+  const db = getDB();
+  const product = db.products.find(p => p.id === productId);
+
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found.' });
+  }
+
+  // Use specified keyword or the first keyword from the product's list
+  const searchKeyword = keyword || product.keywords[0];
+  if (!searchKeyword) {
+    return res.status(400).json({ error: 'No keyword available for scraping.' });
+  }
+
+  console.log(`Running crawler for product [${product.name}] using keyword [${searchKeyword}]...`);
+  
+  const result = await scrapeNaverShopping(searchKeyword);
+
+  if (result.success) {
+    // Update product competitors and crawl date
+    product.competitors = result.competitors;
+    product.lastCrawled = new Date().toISOString();
+    
+    db.naverAdsSettings = getDB().naverAdsSettings; // sync settings just in case
+    saveDB(db);
+
+    res.json({
+      message: 'Crawler matched competitor prices successfully.',
+      source: result.source,
+      product
+    });
+  } else {
+    res.status(500).json({ error: 'Competitor matching failed.', details: result });
+  }
+});
+
+// -------------------------------------------------------------
+// 2. NAVER AD API CONFIG & PROXY ROUTES
+// -------------------------------------------------------------
+
+// Get Naver Ad settings
+app.get('/api/naver-ads/settings', (req, res) => {
+  const db = getDB();
+  res.json(db.naverAdsSettings || {});
+});
+
+// Save Naver Ad settings
+app.post('/api/naver-ads/settings', (req, res) => {
+  const db = getDB();
+  const { customerId, apiKey, apiSecret, licenseKey } = req.body;
+
+  db.naverAdsSettings = {
+    customerId: customerId || '',
+    apiKey: apiKey || '',
+    apiSecret: apiSecret || '',
+    licenseKey: licenseKey || '',
+    isConnected: !!(customerId && apiKey && apiSecret)
+  };
+
+  saveDB(db);
+  
+  // Re-instantiate/update the Naver Ad API configuration helper
+  adApi.db = db;
+
+  res.json({
+    message: 'Naver Ads configuration saved.',
+    settings: db.naverAdsSettings
+  });
+});
+
+// Fetch active campaigns
+app.get('/api/naver-ads/campaigns', async (req, res) => {
+  try {
+    const campaigns = await adApi.getCampaigns();
+    res.json(campaigns);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fetch adgroups in a campaign
+app.get('/api/naver-ads/adgroups', async (req, res) => {
+  const { campaignId } = req.query;
+  try {
+    const groups = await adApi.getAdGroups(campaignId);
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fetch keywords in an adgroup
+app.get('/api/naver-ads/keywords', async (req, res) => {
+  const { adgroupId } = req.query;
+  try {
+    const keywords = await adApi.getKeywords(adgroupId);
+    res.json(keywords);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Adjust keyword bid
+app.post('/api/naver-ads/adjust-bid', async (req, res) => {
+  const { keywordId, bidAmt } = req.body;
+  
+  if (!keywordId || bidAmt === undefined) {
+    return res.status(400).json({ error: 'Keyword ID and bid amount are required.' });
+  }
+
+  try {
+    const result = await adApi.adjustKeywordBid(keywordId, parseInt(bidAmt, 10));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Retrieve monthly search query statistics and average CPC (Naver Keyword Tool)
+app.get('/api/naver-ads/keyword-info', async (req, res) => {
+  const { keywords } = req.query;
+  
+  if (!keywords) {
+    return res.status(400).json({ error: 'Keywords are required.' });
+  }
+
+  const keywordsArray = keywords.split(',').map(kw => kw.trim());
+  try {
+    const result = await adApi.getKeywordInfo(keywordsArray);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Serve static frontend files
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Burob Travel Ad Dashboard server is running on http://localhost:${PORT}`);
+});

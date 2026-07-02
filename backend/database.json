@@ -1,0 +1,159 @@
+{
+  "products": [
+    {
+      "id": "prod-001",
+      "name": "제주도 3박4일 힐링 투어",
+      "price": 290000,
+      "marginRate": 0.25,
+      "keywords": [
+        "제주도 여행",
+        "제주도 패키지",
+        "제주도 3박4일"
+      ],
+      "competitors": [
+        {
+          "name": "야놀자",
+          "productName": "제주도 여행 특가 패키지 [실시간 가격비교]",
+          "price": 291000,
+          "url": "https://search.shopping.naver.com/search/all?query=%EC%A0%9C%EC%A3%BC%EB%8F%84%20%EC%97%AC%ED%96%89"
+        },
+        {
+          "name": "인터파크투어",
+          "productName": "제주도 여행 특가 패키지 [실시간 가격비교]",
+          "price": 306000,
+          "url": "https://search.shopping.naver.com/search/all?query=%EC%A0%9C%EC%A3%BC%EB%8F%84%20%EC%97%AC%ED%96%89"
+        },
+        {
+          "name": "하나투어",
+          "productName": "제주도 여행 특가 패키지 [실시간 가격비교]",
+          "price": 315000,
+          "url": "https://search.shopping.naver.com/search/all?query=%EC%A0%9C%EC%A3%BC%EB%8F%84%20%EC%97%AC%ED%96%89"
+        }
+      ],
+      "lastCrawled": "2026-07-02T05:56:55.901Z"
+    },
+    {
+      "id": "prod-002",
+      "name": "후쿠오카 온천 2박3일",
+      "price": 450000,
+      "marginRate": 0.2,
+      "keywords": [
+        "후쿠오카 여행",
+        "후쿠오카 온천",
+        "후쿠오카 패키지"
+      ],
+      "competitors": [
+        {
+          "name": "하나투어",
+          "price": 439000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "모두투어",
+          "price": 420000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "인터파크투어",
+          "price": 445000,
+          "url": "https://search.shopping.naver.com"
+        }
+      ],
+      "lastCrawled": "2026-07-02T12:00:00+09:00"
+    },
+    {
+      "id": "prod-003",
+      "name": "발리 허니문 5일",
+      "price": 1200000,
+      "marginRate": 0.3,
+      "keywords": [
+        "발리 여행",
+        "발리 신혼여행",
+        "발리 허니문"
+      ],
+      "competitors": [
+        {
+          "name": "하나투어",
+          "price": 1250000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "인터파크투어",
+          "price": 1280000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "마이리얼트립",
+          "price": 1190000,
+          "url": "https://search.shopping.naver.com"
+        }
+      ],
+      "lastCrawled": "2026-07-02T12:00:00+09:00"
+    },
+    {
+      "id": "prod-004",
+      "name": "오사카 주말 도깨비",
+      "price": 350000,
+      "marginRate": 0.15,
+      "keywords": [
+        "오사카 여행",
+        "오사카 패키지",
+        "오사카 자유여행"
+      ],
+      "competitors": [
+        {
+          "name": "하나투어",
+          "price": 349000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "모두투어",
+          "price": 355000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "야놀자",
+          "price": 339000,
+          "url": "https://search.shopping.naver.com"
+        }
+      ],
+      "lastCrawled": "2026-07-02T12:00:00+09:00"
+    },
+    {
+      "id": "prod-005",
+      "name": "유럽 일주 9일",
+      "price": 3400000,
+      "marginRate": 0.18,
+      "keywords": [
+        "유럽 패키지",
+        "유럽 여행",
+        "유럽 패키지 여행"
+      ],
+      "competitors": [
+        {
+          "name": "하나투어",
+          "price": 3600000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "모두투어",
+          "price": 3490000,
+          "url": "https://search.shopping.naver.com"
+        },
+        {
+          "name": "노랑풍선",
+          "price": 3550000,
+          "url": "https://search.shopping.naver.com"
+        }
+      ],
+      "lastCrawled": "2026-07-02T12:00:00+09:00"
+    }
+  ],
+  "naverAdsSettings": {
+    "customerId": "",
+    "apiKey": "",
+    "apiSecret": "",
+    "licenseKey": "",
+    "isConnected": false
+  }
+}
