@@ -1140,6 +1140,11 @@ async function handleSaveSettings(e) {
       body: JSON.stringify(payload)
     });
 
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status} - ${errText || '서버 오류가 발생했습니다.'}`);
+    }
+
     const data = await res.json();
     hideLoader();
 
