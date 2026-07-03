@@ -1412,11 +1412,26 @@ async function handleShoppingAdSelection() {
   const ad = state.shopAds.find(a => a.nccAdId === adId);
   if (!ad) return;
 
-  const adName = ad.name || ad.adattr?.productName || '';
-  const keyword = extractProductKeyword(adName);
+  const adName = ad.name || 
+                 ad.ad?.productName || 
+                 ad.adattr?.productName || 
+                 ad.adMsg1 || 
+                 ad.adMsg2 || 
+                 '';
+  let keyword = extractProductKeyword(adName);
+  
   const adgroupId = elements.shopAdgroupSelect.value;
   const adgroup = state.shopAdgroups.find(g => g.nccAdgroupId === adgroupId);
   const bidAmt = adgroup ? adgroup.bidAmt : 800;
+
+  if (!keyword && adgroup) {
+    keyword = extractProductKeyword(adgroup.name);
+  }
+
+  if (!keyword) {
+    alert('소재명 및 광고그룹명에서 크롤링할 키워드를 추출할 수 없습니다.');
+    return;
+  }
 
   // Cross-reference price from products database, default fallback to 350,000 KRW
   const matchedProduct = state.products.find(p => 
