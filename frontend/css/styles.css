@@ -718,6 +718,15 @@ input:checked + .slider-switch:before {
   color: var(--status-warning);
 }
 
+.insight-item.info {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.02);
+}
+.insight-item.info .insight-icon {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
 .insight-content h4 {
   font-weight: 600;
   margin-bottom: 2px;

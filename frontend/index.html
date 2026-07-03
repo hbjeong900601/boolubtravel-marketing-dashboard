@@ -43,6 +43,12 @@
           </svg>
           <span>광고 입찰 관리</span>
         </a>
+        <a class="nav-item" data-tab="shopping-optimizer">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+          <span>쇼핑광고 최적화</span>
+        </a>
         <a class="nav-item" data-tab="settings">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -427,6 +433,150 @@
           <div id="bid-no-data-msg" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px;">
             캠페인과 광고 그룹을 선택하면 등록된 키워드 입찰 정보를 불러옵니다.
           </div>
+        </div>
+      </section>
+
+      <!-- TAB 4-2: SHOPPING ADS OPTIMIZER -->
+      <section class="tab-content" id="tab-shopping-optimizer">
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-header">
+            <h3 class="card-title">네이버 쇼핑검색광고 최적화 & 가격비교</h3>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+            <div class="form-group">
+              <label>1단계: 쇼핑 캠페인 선택 (Type: SHOPPING)</label>
+              <select class="select-control" id="shop-campaign-select">
+                <option value="">쇼핑 캠페인을 선택하세요</option>
+                <!-- Filled via JS -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label>2단계: 광고 대상 상품(광고 그룹) 선택</label>
+              <select class="select-control" id="shop-adgroup-select" disabled>
+                <option value="">광고 그룹을 선택하세요</option>
+                <!-- Filled via JS -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-main-layout" id="shop-optimizer-panels" style="display: none;">
+          <!-- Competitor Price & Strategy Board -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card-header">
+              <h3 class="card-title">실시간 네이버 쇼핑 경쟁사 가격 추적</h3>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+              <div>
+                <span style="font-size: 12px; color: var(--text-muted);">자사 판매가격 (부럽트래블)</span>
+                <div style="font-size: 20px; font-weight: 700; color: #00e676; margin-top: 4px;" id="shop-our-price">₩0</div>
+              </div>
+              <div style="text-align: right;">
+                <span style="font-size: 12px; color: var(--text-muted);">경쟁사 최저가</span>
+                <div style="font-size: 20px; font-weight: 700; color: #ff3d71; margin-top: 4px;" id="shop-competitor-min-price">₩0</div>
+              </div>
+            </div>
+
+            <div style="height: 220px; position: relative;">
+              <canvas id="shop-price-chart"></canvas>
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>업체명 (쇼핑몰)</th>
+                    <th>매칭 상품명</th>
+                    <th>판매 가격</th>
+                    <th>링크</th>
+                  </tr>
+                </thead>
+                <tbody id="shop-competitors-tbody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bidding Strategist & ROAS Calculator -->
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+            <!-- Price Competitiveness Status Card -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">마케팅 가격 경쟁력 분석</h3>
+              </div>
+              
+              <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                <span style="font-size: 13px; color: var(--text-muted);">경쟁력 상태:</span>
+                <span class="badge" id="shop-competitiveness-badge" style="font-size: 14px; padding: 6px 12px;">분석 중</span>
+              </div>
+
+              <div class="insight-item positive" id="shop-strategy-box">
+                <div class="insight-icon" id="shop-strategy-icon">💡</div>
+                <div class="insight-content">
+                  <h4 id="shop-strategy-title">입찰 권장 전략</h4>
+                  <p id="shop-strategy-desc">데이터를 불러오는 중입니다...</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Specialized Shopping ROAS Simulator -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">쇼핑 광고 입찰가 시뮬레이션</h3>
+              </div>
+
+              <!-- Product Cost Input -->
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label for="shop-cost-input">자사 상품 원가 (소비자가 대비 원가)</label>
+                <input type="number" class="input-control" id="shop-cost-input" value="80000" style="text-align: right;">
+              </div>
+
+              <!-- Slider: Expected CPC -->
+              <div class="slider-container">
+                <div class="slider-header">
+                  <span class="slider-label">목표 쇼핑 클릭당 비용 (CPC)</span>
+                  <span class="slider-value" id="shop-cpc-value">800 원</span>
+                </div>
+                <input type="range" id="shop-cpc-slider" min="150" max="3000" step="50" value="800">
+              </div>
+
+              <!-- Slider: Expected Conversion Rate (CVR) -->
+              <div class="slider-container">
+                <div class="slider-header">
+                  <span class="slider-label">예상 쇼핑 구매전환율 (CVR)</span>
+                  <span class="slider-value" id="shop-cvr-value">2.5%</span>
+                </div>
+                <input type="range" id="shop-cvr-slider" min="0.1" max="10.0" step="0.1" value="2.5">
+              </div>
+
+              <!-- Results Panel -->
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 16px; border-radius: 8px; margin-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <span style="color: var(--text-muted); font-size: 13px;">건당 마진 (원가 공제)</span>
+                  <span style="font-weight: 700; font-size: 15px;" id="shop-res-margin">₩0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <span style="color: var(--text-muted); font-size: 13px;">한 건 판매 당 광고 집행비</span>
+                  <span style="font-weight: 700; font-size: 15px; color: #ff3d71;" id="shop-res-adcost">₩32,000</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-top: 1px dashed var(--border-color); padding-top: 12px;">
+                  <span style="color: var(--text-muted); font-size: 13px;">광고 순수익 (건당)</span>
+                  <span style="font-weight: 700; font-size: 15px;" id="shop-res-netprofit">₩0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 12px;">
+                  <span style="color: white; font-weight: 600; font-size: 14px;">예상 쇼핑 ROAS</span>
+                  <span style="font-weight: 800; font-size: 26px; color: var(--color-naver-glow);" id="shop-res-roas">350%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="shop-no-data-msg" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 8px;">
+          쇼핑 캠페인과 상품(광고 그룹)을 선택하면 실시간 가격 추적 및 최적화 진단이 시작됩니다.
         </div>
       </section>
 

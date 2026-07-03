@@ -100,32 +100,36 @@ app.post('/api/crawler/match', async (req, res) => {
   const db = getDB();
   const product = db.products.find(p => p.id === productId);
 
-  if (!product) {
-    return res.status(404).json({ error: 'Product not found.' });
-  }
-
   // Use specified keyword or the first keyword from the product's list
-  const searchKeyword = keyword || product.keywords[0];
+  const searchKeyword = keyword || (product ? product.keywords[0] : null);
   if (!searchKeyword) {
     return res.status(400).json({ error: 'No keyword available for scraping.' });
   }
 
-  console.log(`Running crawler for product [${product.name}] using keyword [${searchKeyword}]...`);
+  console.log(`Running crawler for product [${product ? product.name : productId}] using keyword [${searchKeyword}]...`);
   
   const result = await scrapeNaverShopping(searchKeyword);
 
   if (result.success) {
-    // Update product competitors and crawl date
-    product.competitors = result.competitors;
-    product.lastCrawled = new Date().toISOString();
-    
-    db.naverAdsSettings = getDB().naverAdsSettings; // sync settings just in case
-    saveDB(db);
+    if (product) {
+      // Update product competitors and crawl date if product exists
+      product.competitors = result.competitors;
+      product.lastCrawled = new Date().toISOString();
+      db.naverAdsSettings = getDB().naverAdsSettings; // sync settings just in case
+      saveDB(db);
+    }
 
     res.json({
       message: 'Crawler matched competitor prices successfully.',
       source: result.source,
-      product
+      product: product || {
+        id: productId,
+        name: searchKeyword,
+        price: 0, // Will be filled dynamically by frontend
+        keywords: [searchKeyword],
+        competitors: result.competitors,
+        lastCrawled: new Date().toISOString()
+      }
     });
   } else {
     res.status(500).json({ error: 'Competitor matching failed.', details: result });

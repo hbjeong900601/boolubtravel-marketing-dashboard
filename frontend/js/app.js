@@ -105,7 +105,30 @@ const elements = {
   settingsApiKey: document.getElementById('settings-api-key'),
   settingsApiSecret: document.getElementById('settings-api-secret'),
   settingsLicenseKey: document.getElementById('settings-license-key'),
-  clearSettingsBtn: document.getElementById('clear-settings-btn')
+  clearSettingsBtn: document.getElementById('clear-settings-btn'),
+
+  // Tab 4-2: Shopping Optimizer
+  shopCampaignSelect: document.getElementById('shop-campaign-select'),
+  shopAdgroupSelect: document.getElementById('shop-adgroup-select'),
+  shopOptimizerPanels: document.getElementById('shop-optimizer-panels'),
+  shopNoDataMsg: document.getElementById('shop-no-data-msg'),
+  shopOurPrice: document.getElementById('shop-our-price'),
+  shopCompetitorMinPrice: document.getElementById('shop-competitor-min-price'),
+  shopCompetitorsTbody: document.getElementById('shop-competitors-tbody'),
+  shopCompetitivenessBadge: document.getElementById('shop-competitiveness-badge'),
+  shopStrategyBox: document.getElementById('shop-strategy-box'),
+  shopStrategyIcon: document.getElementById('shop-strategy-icon'),
+  shopStrategyTitle: document.getElementById('shop-strategy-title'),
+  shopStrategyDesc: document.getElementById('shop-strategy-desc'),
+  shopCostInput: document.getElementById('shop-cost-input'),
+  shopCpcSlider: document.getElementById('shop-cpc-slider'),
+  shopCpcValue: document.getElementById('shop-cpc-value'),
+  shopCvrSlider: document.getElementById('shop-cvr-slider'),
+  shopCvrValue: document.getElementById('shop-cvr-value'),
+  shopResMargin: document.getElementById('shop-res-margin'),
+  shopResAdcost: document.getElementById('shop-res-adcost'),
+  shopResNetprofit: document.getElementById('shop-res-netprofit'),
+  shopResRoas: document.getElementById('shop-res-roas')
 };
 
 // -------------------------------------------------------------
@@ -189,6 +212,13 @@ function setupEventListeners() {
   elements.bidCampaignSelect.addEventListener('change', handleCampaignSelection);
   elements.bidAdgroupSelect.addEventListener('change', handleAdgroupSelection);
 
+  // Shopping Ads Optimizer Selections
+  elements.shopCampaignSelect.addEventListener('change', handleShoppingCampaignSelection);
+  elements.shopAdgroupSelect.addEventListener('change', handleShoppingAdgroupSelection);
+  elements.shopCostInput.addEventListener('input', runShoppingSimulation);
+  elements.shopCpcSlider.addEventListener('input', runShoppingSimulation);
+  elements.shopCvrSlider.addEventListener('input', runShoppingSimulation);
+
   // Settings Save
   elements.apiSettingsForm.addEventListener('submit', handleSaveSettings);
   elements.clearSettingsBtn.addEventListener('click', handleClearSettings);
@@ -239,6 +269,9 @@ function switchTab(tabId) {
   } else if (tabId === 'bid-manager') {
     title = '광고 입찰 세부 제어';
     subtitle = '캠페인/광고그룹 목록 조회 및 키워드별 실시간 CPC 입찰가 수정';
+  } else if (tabId === 'shopping-optimizer') {
+    title = '쇼핑검색 광고 최적화';
+    subtitle = '네이버 쇼핑검색광고 분석 및 실시간 경쟁사 가격 대비 입찰 조정 제안';
   } else if (tabId === 'settings') {
     title = '네이버 API 연동 설정';
     subtitle = '네이버 검색광고 API 자격증명 관리 및 암호화 연동 서비스 설정';
@@ -250,6 +283,12 @@ function switchTab(tabId) {
   // Render trigger actions for specific tabs
   if (tabId === 'bid-manager' && state.campaigns.length === 0) {
     fetchCampaigns().then(populateCampaignDropdown);
+  } else if (tabId === 'shopping-optimizer') {
+    if (state.campaigns.length === 0) {
+      fetchCampaigns().then(populateShoppingCampaignDropdown);
+    } else {
+      populateShoppingCampaignDropdown();
+    }
   }
 }
 
@@ -1226,4 +1265,297 @@ async function handleClearSettings() {
     hideLoader();
     alert('에러: ' + err.message);
   }
+}
+
+// -------------------------------------------------------------
+// TAB 4-2: SHOPPING ADS OPTIMIZER LOGIC
+// -------------------------------------------------------------
+
+function populateShoppingCampaignDropdown() {
+  const select = elements.shopCampaignSelect;
+  select.innerHTML = '<option value="">쇼핑 캠페인을 선택하세요</option>';
+  
+  const shoppingCampaigns = state.campaigns.filter(c => c.campaignTp === 'SHOPPING');
+  
+  shoppingCampaigns.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.nccCampaignId;
+    opt.innerText = c.name;
+    select.appendChild(opt);
+  });
+  
+  elements.shopAdgroupSelect.disabled = true;
+  elements.shopAdgroupSelect.innerHTML = '<option value="">광고 그룹을 선택하세요</option>';
+  elements.shopOptimizerPanels.style.display = 'none';
+  elements.shopNoDataMsg.style.display = 'block';
+  elements.shopNoDataMsg.innerText = '쇼핑 캠페인과 상품(광고 그룹)을 선택하면 실시간 가격 추적 및 최적화 진단이 시작됩니다.';
+}
+
+async function handleShoppingCampaignSelection() {
+  const campaignId = elements.shopCampaignSelect.value;
+  if (!campaignId) {
+    populateShoppingCampaignDropdown();
+    return;
+  }
+
+  showLoader('광고 그룹 리스트 가져오는 중...');
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/naver-ads/adgroups?campaignId=${campaignId}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status} - ${errText}`);
+    }
+    state.shopAdgroups = await res.json();
+    
+    hideLoader();
+
+    const select = elements.shopAdgroupSelect;
+    select.disabled = false;
+    select.innerHTML = '<option value="">광고 그룹을 선택하세요</option>';
+    
+    state.shopAdgroups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.nccAdgroupId;
+      opt.innerText = g.name;
+      select.appendChild(opt);
+    });
+
+    elements.shopOptimizerPanels.style.display = 'none';
+    elements.shopNoDataMsg.style.display = 'block';
+    elements.shopNoDataMsg.innerText = '광고 그룹(상품)을 마저 선택하시면 실시간 경쟁사 비교가 시작됩니다.';
+
+  } catch (err) {
+    hideLoader();
+    alert('에러: ' + err.message);
+  }
+}
+
+function extractProductKeyword(name) {
+  let kw = name.replace(/^[A-Z0-9.\-\s]+/i, ''); // Remove leading labels like B01.
+  kw = kw.replace(/\(.*?\)/g, ''); // Remove parentheses
+  kw = kw.replace(/\[.*?\]/g, ''); // Remove brackets
+  kw = kw.replace(/\s*(그룹|패키지|상품|검색|쇼핑)\s*/g, ''); // Remove generic terms
+  kw = kw.trim();
+  return kw || name;
+}
+
+async function handleShoppingAdgroupSelection() {
+  const adgroupId = elements.shopAdgroupSelect.value;
+  if (!adgroupId) {
+    elements.shopOptimizerPanels.style.display = 'none';
+    elements.shopNoDataMsg.style.display = 'block';
+    return;
+  }
+
+  const adgroup = state.shopAdgroups.find(g => g.nccAdgroupId === adgroupId);
+  if (!adgroup) return;
+
+  const keyword = extractProductKeyword(adgroup.name);
+  
+  // Cross-reference price from products database, default fallback to 350,000 KRW
+  const matchedProduct = state.products.find(p => 
+    p.name.includes(keyword) || keyword.includes(p.name) ||
+    p.keywords.some(k => k.includes(keyword) || keyword.includes(k))
+  );
+  
+  const price = matchedProduct ? matchedProduct.price : (adgroup.bidAmt ? adgroup.bidAmt * 100 : 350000);
+
+  showLoader(`네이버 쇼핑에서 [${keyword}] 경쟁 업체 실시간 가격 파싱 및 가격비교 분석 중...`);
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/crawler/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: adgroupId, keyword })
+    });
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status} - ${errText}`);
+    }
+
+    const result = await res.json();
+    hideLoader();
+
+    if (result.product) {
+      const parsedProduct = result.product;
+      parsedProduct.price = price;
+      state.selectedShopProduct = parsedProduct;
+      
+      elements.shopNoDataMsg.style.display = 'none';
+      elements.shopOptimizerPanels.style.display = 'grid';
+
+      elements.shopOurPrice.innerText = `₩${price.toLocaleString()}`;
+      
+      const minCompetitorPrice = parsedProduct.competitors && parsedProduct.competitors.length > 0 
+        ? Math.min(...parsedProduct.competitors.map(c => c.price))
+        : price;
+      
+      elements.shopCompetitorMinPrice.innerText = `₩${minCompetitorPrice.toLocaleString()}`;
+
+      renderShopCompetitorsTable(parsedProduct.competitors);
+      drawShoppingPriceChart(price, parsedProduct.competitors || []);
+      evaluatePriceCompetitiveness(price, minCompetitorPrice);
+
+      // Default cost to 70% of sale price
+      elements.shopCostInput.value = Math.round(price * 0.7);
+      
+      // Initialize sliders to default values
+      elements.shopCpcSlider.value = adgroup.bidAmt || 800;
+      elements.shopCvrSlider.value = 2.5;
+
+      runShoppingSimulation();
+    }
+  } catch (err) {
+    hideLoader();
+    alert('에러: ' + err.message);
+  }
+}
+
+function renderShopCompetitorsTable(competitors) {
+  const tbody = elements.shopCompetitorsTbody;
+  tbody.innerHTML = '';
+
+  if (!competitors || competitors.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">매칭된 경쟁사 정보가 없습니다.</td></tr>';
+    return;
+  }
+
+  competitors.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight: 700; color: white;">${c.name}</td>
+      <td style="font-size: 13px; color: var(--text-muted);">${c.productName}</td>
+      <td style="color: var(--color-secondary); font-weight: 600;">₩${c.price.toLocaleString()}</td>
+      <td>
+        <a href="${c.url}" target="_blank" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 11px;">
+          이동
+        </a>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function evaluatePriceCompetitiveness(ourPrice, minCompetitorPrice) {
+  const badge = elements.shopCompetitivenessBadge;
+  const box = elements.shopStrategyBox;
+  const icon = elements.shopStrategyIcon;
+  const title = elements.shopStrategyTitle;
+  const desc = elements.shopStrategyDesc;
+
+  badge.className = 'badge';
+  box.className = 'insight-item';
+
+  const diff = ourPrice - minCompetitorPrice;
+
+  if (diff < -10000) {
+    badge.innerText = '가격 우위 (최상)';
+    badge.classList.add('badge-success');
+    box.classList.add('positive');
+    icon.innerText = '📈';
+    title.innerText = '적극적 입찰가 인상 전략 추천';
+    desc.innerText = `현재 자사 상품이 경쟁사 최저가보다 ₩${Math.abs(diff).toLocaleString()} 더 저렴합니다. 구매 전환율이 매우 높을 시점이므로, 트래픽을 최대한 쓸어 담을 수 있도록 쇼핑 CPC 입찰가를 적극 인상(+50원~150원)하여 첫 페이지 상위 노출을 확보하세요!`;
+  } else if (diff > 10000) {
+    badge.innerText = '가격 열위 (위험)';
+    badge.classList.add('badge-danger');
+    box.classList.add('warning');
+    icon.innerText = '⚠️';
+    title.innerText = '입찰가 보수적 하향 전략 추천';
+    desc.innerText = `현재 자사 상품이 경쟁사 최저가보다 ₩${diff.toLocaleString()} 더 비쌉니다. 가격 차이로 인해 광고를 보고 들어온 고객들의 이탈률이 높을 수 있습니다. 무리한 예산 낭비를 방지하기 위해 입찰가를 하향 조정(-50원~100원)하여 노출순위를 내리거나 상품 할인을 우선 검토해 보세요.`;
+  } else {
+    badge.innerText = '가격 경합 (보통)';
+    badge.classList.add('badge-warning');
+    box.classList.add('info');
+    icon.innerText = '⚖️';
+    title.innerText = '현재 입찰가 유지 및 혜택 부각 추천';
+    desc.innerText = `경쟁사 최저가와 가격 차이가 ₩${Math.abs(diff).toLocaleString()} 이내로 거의 비슷합니다. 노출도를 유지하기 위해 기존 입찰가를 고수하되, 무료배송, 특별 사은품 등의 쇼핑 부가 혜택 문구를 노출하여 가격 외 경쟁력을 더 강조하세요.`;
+  }
+}
+
+function runShoppingSimulation() {
+  if (!state.selectedShopProduct) return;
+
+  const cost = parseInt(elements.shopCostInput.value, 10) || 0;
+  const cpc = parseInt(elements.shopCpcSlider.value, 10) || 150;
+  const cvr = parseFloat(elements.shopCvrSlider.value) || 1.0;
+  
+  elements.shopCpcValue.innerText = `${cpc.toLocaleString()} 원`;
+  elements.shopCvrValue.innerText = `${cvr.toFixed(1)}%`;
+
+  const ourPrice = state.selectedShopProduct.price;
+  const margin = Math.max(0, ourPrice - cost);
+  const cpa = Math.round((cpc * 100) / cvr);
+  const netProfit = margin - cpa;
+  const roas = cpa > 0 ? Math.round((ourPrice / cpa) * 100) : 0;
+
+  elements.shopResMargin.innerText = `₩${margin.toLocaleString()}`;
+  elements.shopResAdcost.innerText = `₩${cpa.toLocaleString()} (유치 단가)`;
+  elements.shopResNetprofit.innerText = `₩${netProfit.toLocaleString()}`;
+  elements.shopResRoas.innerText = `${roas}%`;
+
+  if (netProfit < 0) {
+    elements.shopResNetprofit.style.color = '#ff3d71';
+  } else {
+    elements.shopResNetprofit.style.color = '#00e676';
+  }
+}
+
+function drawShoppingPriceChart(ourPrice, competitors) {
+  const ctx = document.getElementById('shop-price-chart').getContext('2d');
+  
+  if (state.charts.shopping) {
+    state.charts.shopping.destroy();
+  }
+
+  const labels = ['부럽트래블 (자사)'];
+  const prices = [ourPrice];
+  const colors = ['#00e676'];
+
+  competitors.forEach(c => {
+    labels.push(c.name);
+    prices.push(c.price);
+    colors.push('#3b82f6');
+  });
+
+  state.charts.shopping = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: prices,
+        backgroundColor: colors,
+        borderWidth: 0,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `가격: ₩${context.raw.toLocaleString()}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: {
+            color: 'rgba(255,255,255,0.6)',
+            callback: value => `₩${(value / 1000).toLocaleString()}k`
+          }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: 'rgba(255,255,255,0.6)' }
+        }
+      }
+    }
+  });
 }

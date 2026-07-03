@@ -127,21 +127,31 @@ export default {
         const { productId, keyword } = await request.json();
 
         const product = db.products.find(p => p.id === productId);
-        if (!product) {
-          return jsonResponse({ error: 'Product not found.' }, 404);
+
+        const searchKeyword = keyword || (product ? product.keywords[0] : null);
+        if (!searchKeyword) {
+          return jsonResponse({ error: 'No keyword available for scraping.' }, 400);
         }
 
-        const searchKeyword = keyword || product.keywords[0];
         const crawlResult = await runCrawler(searchKeyword);
 
         if (crawlResult.success) {
-          product.competitors = crawlResult.competitors;
-          product.lastCrawled = new Date().toISOString();
-          await saveDB(db, env);
+          if (product) {
+            product.competitors = crawlResult.competitors;
+            product.lastCrawled = new Date().toISOString();
+            await saveDB(db, env);
+          }
           return jsonResponse({
             message: 'Crawler matched competitor prices successfully.',
             source: crawlResult.source,
-            product
+            product: product || {
+              id: productId,
+              name: searchKeyword,
+              price: 0, // Will be filled dynamically by frontend
+              keywords: [searchKeyword],
+              competitors: crawlResult.competitors,
+              lastCrawled: new Date().toISOString()
+            }
           }, 200);
         } else {
           return jsonResponse({ error: 'Crawling failed.' }, 500);
