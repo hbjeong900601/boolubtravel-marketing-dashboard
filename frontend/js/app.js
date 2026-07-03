@@ -114,6 +114,9 @@ const elements = {
   shopAdgroupSelect: document.getElementById('shop-adgroup-select'),
   shopAdSelect: document.getElementById('shop-ad-select'),
   shopOptimizerPanels: document.getElementById('shop-optimizer-panels'),
+  shopApiStatusBadge: document.getElementById('shop-api-status-badge'),
+  shopApiWarningBanner: document.getElementById('shop-api-warning-banner'),
+  goToSettingsLink: document.getElementById('go-to-settings-link'),
   shopNoDataMsg: document.getElementById('shop-no-data-msg'),
   shopOurPrice: document.getElementById('shop-our-price'),
   shopCurrentRank: document.getElementById('shop-current-rank'),
@@ -225,6 +228,14 @@ function setupEventListeners() {
   elements.shopCpcSlider.addEventListener('input', runShoppingSimulation);
   elements.shopCvrSlider.addEventListener('input', runShoppingSimulation);
   elements.shopSyncBidBtn.addEventListener('click', handleShoppingSyncBid);
+  
+  if (elements.goToSettingsLink) {
+    elements.goToSettingsLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const settingsTab = document.querySelector('[data-tab="settings"]');
+      if (settingsTab) settingsTab.click();
+    });
+  }
 
   // Settings Save
   elements.apiSettingsForm.addEventListener('submit', handleSaveSettings);
@@ -1511,18 +1522,34 @@ async function handleShoppingAdSelection() {
       parsedProduct.competitors = competitors;
       state.selectedShopProduct = parsedProduct;
       
+      // Update real API vs mock warning visibility
+      const isRealData = result.source === 'naver_open_api';
+      if (isRealData) {
+        elements.shopApiStatusBadge.className = 'badge badge-success';
+        elements.shopApiStatusBadge.innerText = '실시간 API 연동됨';
+        elements.shopApiWarningBanner.style.display = 'none';
+      } else {
+        elements.shopApiStatusBadge.className = 'badge badge-warning';
+        elements.shopApiStatusBadge.innerText = '시뮬레이션 모드';
+        elements.shopApiWarningBanner.style.display = 'flex';
+      }
+
       elements.shopNoDataMsg.style.display = 'none';
       elements.shopOptimizerPanels.style.display = 'grid';
 
       elements.shopOurPrice.innerText = `₩${price.toLocaleString()}`;
       
       // Min competitor price excluding our own store to find the market minimum
-      const otherCompetitors = competitors.filter(c => !(c.name.includes('부럽') || c.name.toLowerCase().includes('boolub')));
+      const otherCompetitors = competitors.filter(c => !(c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub')));
       const minCompetitorPrice = otherCompetitors.length > 0 
         ? Math.min(...otherCompetitors.map(c => c.price))
-        : price;
+        : null;
       
-      elements.shopCompetitorMinPrice.innerText = `₩${minCompetitorPrice.toLocaleString()}`;
+      if (minCompetitorPrice !== null) {
+        elements.shopCompetitorMinPrice.innerText = `₩${minCompetitorPrice.toLocaleString()}`;
+      } else {
+        elements.shopCompetitorMinPrice.innerText = '경쟁사 없음';
+      }
 
       // Calculate Live Search Rank based on sorted list index
       let searchRankText = '분석 불가';
@@ -1635,6 +1662,16 @@ function evaluatePriceCompetitiveness(ourPrice, minCompetitorPrice) {
   badge.className = 'badge';
   box.className = 'insight-item';
 
+  if (minCompetitorPrice === null) {
+    badge.innerText = '독점 노출 (우수)';
+    badge.classList.add('badge-success');
+    box.classList.add('positive');
+    icon.innerText = '💎';
+    title.innerText = '독점 키워드 확보 및 입찰 효율 유지 추천';
+    desc.innerText = `현재 네이버 쇼핑에서 이 키워드로 광고/판매 중인 타사 경쟁사 상품이 확인되지 않습니다. 단독 노출 상태이므로 무리하게 입찰가를 올리거나 판매가를 인하할 필요가 전혀 없으며, 현재 마진과 입찰 단가를 고수하며 최대 수익을 확보해 가세요.`;
+    return;
+  }
+
   const diff = ourPrice - minCompetitorPrice;
 
   if (diff < -10000) {
@@ -1701,9 +1738,12 @@ function drawShoppingPriceChart(ourPrice, competitors) {
   const colors = ['#00e676'];
 
   competitors.forEach(c => {
-    labels.push(c.name);
-    prices.push(c.price);
-    colors.push('#3b82f6');
+    const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
+    if (!isOwn) {
+      labels.push(c.name);
+      prices.push(c.price);
+      colors.push('#3b82f6');
+    }
   });
 
   state.charts.shopping = new Chart(ctx, {

@@ -472,7 +472,10 @@
           <!-- Competitor Price & Strategy Board -->
           <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
             <div class="card-header">
-              <h3 class="card-title">실시간 네이버 쇼핑 경쟁사 가격 추적</h3>
+              <h3 class="card-title" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <span>실시간 네이버 쇼핑 경쟁사 가격 추적</span>
+                <span id="shop-api-status-badge" class="badge badge-secondary" style="font-size: 11px; font-weight: normal;">시뮬레이션 모드</span>
+              </h3>
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
@@ -487,6 +490,14 @@
               <div style="text-align: right;">
                 <span style="font-size: 12px; color: var(--text-muted);">경쟁사 최저가</span>
                 <div style="font-size: 20px; font-weight: 700; color: #ff3d71; margin-top: 4px;" id="shop-competitor-min-price">₩0</div>
+              </div>
+            </div>
+
+            <!-- Real-time API connection warning banner -->
+            <div id="shop-api-warning-banner" class="insight-item warning" style="display: none; margin: 0 4px; font-size: 12px; padding: 10px 14px; border-radius: 8px;">
+              <div class="insight-icon">⚠️</div>
+              <div class="insight-content">
+                <strong>실시간 네이버 쇼핑 API 미연동 상태:</strong> 현재 임의로 생성된 모의 시뮬레이션 데이터를 나열 중입니다. 실제 타사의 노출용 상품명 및 가격비교 실데이터를 보시려면 <a href="#" id="go-to-settings-link" style="color: var(--color-primary); text-decoration: underline; font-weight: 700;">설정 탭</a>에서 네이버 쇼핑 오픈 API Key를 등록해 주세요.
               </div>
             </div>
 
@@ -726,6 +737,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=2.2"></script>
+  <script src="js/app.js?v=2.3"></script>
 </body>
 </html>
