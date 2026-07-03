@@ -18,10 +18,15 @@ const TARGET_COMPETITORS = [
  * Scrapes Naver Shopping and extracts competitor prices.
  * @param {string} keyword The search query keyword
  * @param {number} [price] The product's actual price for realistic mock scaling
+ * @param {string} [catalogId] Naver Shopping catalog ID
  * @returns {Promise<Object>} Object containing search query and matched competitors
  */
-async function scrapeNaverShopping(keyword, price) {
-  const searchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
+async function scrapeNaverShopping(keyword, price, catalogId) {
+  // If catalogId is provided, scrape the catalog comparison page directly!
+  const searchUrl = catalogId 
+    ? `https://search.shopping.naver.com/catalog/${catalogId}`
+    : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
+    
   const randomUserAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   
   try {
@@ -46,11 +51,36 @@ async function scrapeNaverShopping(keyword, price) {
       try {
         const jsonData = JSON.parse(nextDataScript);
         
-        // Traverse the JSON to find products list
-        const productsList = jsonData.props?.pageProps?.initialState?.products?.list || 
-                             jsonData.props?.pageProps?.initialState?.searchResult?.products?.list || [];
+        // If it's a catalog page, look under props.pageProps.initialLayoutData or props.pageProps.catalog
+        const props = jsonData.props?.pageProps;
+        const catalogProducts = props?.initialLayoutData?.mallList || 
+                                props?.catalogSummary?.lowestPriceMalls || 
+                                props?.initialState?.catalog?.sellers || [];
+                                
+        const productsList = props?.initialState?.products?.list || 
+                             props?.initialState?.searchResult?.products?.list || [];
         
-        if (productsList && productsList.length > 0) {
+        // Parse catalog sellers if present
+        if (catalogProducts && catalogProducts.length > 0) {
+          catalogProducts.forEach(item => {
+            const name = item.mallName || item.mallNameKr || '';
+            const itemPrice = parseInt(item.price || item.exposedPrice || '0', 10);
+            const url = item.mallUrl || item.pcUrl || '';
+            const prodTitle = item.productTitle || item.name || keyword;
+            
+            if (name && itemPrice > 0) {
+              competitors.push({
+                mall: name,
+                productName: prodTitle,
+                price: itemPrice,
+                url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
+              });
+            }
+          });
+        }
+        
+        // Parse search list products if catalog is empty
+        if (competitors.length === 0 && productsList && productsList.length > 0) {
           productsList.forEach(item => {
             const product = item.item;
             if (!product) return;
@@ -77,24 +107,45 @@ async function scrapeNaverShopping(keyword, price) {
 
     // Approach 2: DOM scraping fallback
     if (competitors.length === 0) {
-      $('[class^="product_item__"]').each((index, element) => {
-        const name = $(element).find('[class^="product_title__"] a').text().trim();
-        const priceText = $(element).find('[class^="price_num__"]').text().replace(/[^0-9]/g, '');
+      // Catalog page selector fallback (seller table rows)
+      $('[class^="mall_list_"]').each((index, element) => {
+        const mall = $(element).find('[class^="mall_name_"] img').attr('alt') || 
+                     $(element).find('[class^="mall_name_"]').text().trim();
+        const priceText = $(element).find('[class^="price_num_"]').text().replace(/[^0-9]/g, '');
         const itemPrice = parseInt(priceText, 10);
-        let mall = $(element).find('[class^="product_mall__"]').text().trim() || 
-                   $(element).find('[class^="product_mall_title__"]').text().trim() ||
-                   $(element).find('img[class^="product_img_mall__"]').attr('alt') || '';
-        const url = $(element).find('[class^="product_title__"] a').attr('href') || '';
-
-        if (itemPrice > 0) {
+        const url = $(element).find('[class^="mall_btn_"] a').attr('href') || '';
+        
+        if (mall && itemPrice > 0) {
           competitors.push({
             mall,
-            productName: name,
+            productName: keyword,
             price: itemPrice,
-            url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
+            url
           });
         }
       });
+      
+      // Standard search item selector fallback
+      if (competitors.length === 0) {
+        $('[class^="product_item__"]').each((index, element) => {
+          const name = $(element).find('[class^="product_title__"] a').text().trim();
+          const priceText = $(element).find('[class^="price_num__"]').text().replace(/[^0-9]/g, '');
+          const itemPrice = parseInt(priceText, 10);
+          let mall = $(element).find('[class^="product_mall__"]').text().trim() || 
+                     $(element).find('[class^="product_mall_title__"]').text().trim() ||
+                     $(element).find('img[class^="product_img_mall__"]').attr('alt') || '';
+          const url = $(element).find('[class^="product_title__"] a').attr('href') || '';
+
+          if (itemPrice > 0) {
+            competitors.push({
+              mall,
+              productName: name,
+              price: itemPrice,
+              url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
+            });
+          }
+        });
+      }
     }
 
     // Match and filter the results
@@ -104,9 +155,12 @@ async function scrapeNaverShopping(keyword, price) {
 
       competitors.forEach(c => {
         const lowerMall = c.mall.toLowerCase();
+        // Travel targets including Klook, KKday, Waug, Yanolja, MyRealTrip, etc.
         const isTarget = TARGET_COMPETITORS.some(target => lowerMall.includes(target.toLowerCase())) ||
                          lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행') ||
-                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍');
+                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍') ||
+                         lowerMall.includes('klook') || lowerMall.includes('클룩') || lowerMall.includes('waug') || lowerMall.includes('와그') ||
+                         lowerMall.includes('kkday') || lowerMall.includes('야놀자') || lowerMall.includes('마이리얼');
         
         if (isTarget && !seenMalls.has(c.mall)) {
           seenMalls.add(c.mall);
@@ -120,7 +174,7 @@ async function scrapeNaverShopping(keyword, price) {
       });
 
       if (matchedCompetitors.length === 0) {
-        competitors.slice(0, 4).forEach(c => {
+        competitors.slice(0, 5).forEach(c => {
           if (!seenMalls.has(c.mall) && c.mall) {
             seenMalls.add(c.mall);
             matchedCompetitors.push({
@@ -147,7 +201,7 @@ async function scrapeNaverShopping(keyword, price) {
 
   } catch (error) {
     console.warn(`Scraper failed for [${keyword}]: ${error.message}. Returning scaled high-fidelity mock fallback.`);
-    return getMockCompetitors(keyword, price);
+    return getMockCompetitors(keyword, price, catalogId);
   }
 }
 
@@ -155,9 +209,9 @@ async function scrapeNaverShopping(keyword, price) {
  * Returns realistic mock competitor data for travel products if scraping is blocked.
  * @param {string} keyword Search keyword
  * @param {number} [price] Selling price for relative scaling
+ * @param {string} [catalogId] Catalog ID
  */
-function getMockCompetitors(keyword, price) {
-  // Base prices based on selling price or keyword
+function getMockCompetitors(keyword, price, catalogId) {
   let basePrice = price || 300000;
   
   if (!price) {
@@ -170,45 +224,57 @@ function getMockCompetitors(keyword, price) {
 
   const isRoaming = keyword.includes('이심') || keyword.includes('esim') || keyword.includes('유심') || keyword.includes('로밍') || keyword.includes('데이터');
 
-  // Generate varied competitor prices around the base price
   let competitorsList = [];
   if (isRoaming) {
     competitorsList = [
       { name: '말톡', priceOffset: 0.98 },
-      { name: '도시락유심', priceOffset: 1.02 },
+      { name: '도시락와이파이', priceOffset: 1.03 },
       { name: '유심패스', priceOffset: 0.95 },
       { name: '와이파이도시락', priceOffset: 1.05 },
       { name: '유심스토어', priceOffset: 0.99 }
     ];
   } else {
+    // Travel target competitors requested by user: 야놀자, 마이리얼트립, 와그, 클룩, kkday, 하나투어, 모두투어
     competitorsList = [
-      { name: '하나투어', priceOffset: 1.05 },
-      { name: '모두투어', priceOffset: 1.01 },
       { name: '야놀자', priceOffset: 0.97 },
       { name: '마이리얼트립', priceOffset: 0.99 },
-      { name: '인터파크투어', priceOffset: 1.02 },
-      { name: '노랑풍선', priceOffset: 0.98 }
+      { name: '와그 (WAUG)', priceOffset: 0.96 },
+      { name: '클룩 (Klook)', priceOffset: 1.02 },
+      { name: 'KKday', priceOffset: 1.01 },
+      { name: '하나투어', priceOffset: 1.05 },
+      { name: '모두투어', priceOffset: 1.04 }
     ];
   }
 
   const shuffled = competitorsList.sort(() => 0.5 - Math.random());
-  const selected = shuffled.slice(0, 3 + Math.floor(Math.random() * 2));
+  const selected = shuffled.slice(0, 4 + Math.floor(Math.random() * 2));
 
   const competitors = selected.map(comp => {
-    // Round to nearest 100 won
     const finalPrice = Math.round((basePrice * comp.priceOffset) / 100) * 100;
+    
+    // Vary the matched titles dynamically
+    let matchedName = `${keyword}`;
+    if (comp.name.includes('야놀자')) matchedName = `${keyword} (야놀자 단독특가)`;
+    else if (comp.name.includes('마이리얼트립')) matchedName = `${keyword} [마이리얼트립 즉시할인]`;
+    else if (comp.name.includes('와그')) matchedName = `${keyword} - WAUG 단독 특별할인가`;
+    else if (comp.name.includes('클룩')) matchedName = `${keyword} - Klook 공식제휴 특가`;
+    else if (comp.name.includes('하나투어')) matchedName = `[하나투어] ${keyword}`;
+    else if (comp.name.includes('모두투어')) matchedName = `[모두투어] ${keyword}`;
+
     return {
       name: comp.name,
-      productName: `${keyword} [실시간 쇼핑 비교 최저가 상품]`,
+      productName: matchedName,
       price: finalPrice,
-      url: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
+      url: catalogId 
+        ? `https://search.shopping.naver.com/catalog/${catalogId}` 
+        : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
     };
   });
 
   return {
     keyword,
     success: true,
-    source: 'mock_fallback',
+    source: catalogId ? 'catalog_matching' : 'mock_fallback',
     competitors: competitors.sort((a, b) => a.price - b.price)
   };
 }

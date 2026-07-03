@@ -1462,7 +1462,7 @@ async function handleShoppingAdSelection() {
     const res = await fetch(`${API_BASE}/api/crawler/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: adId, keyword, price })
+      body: JSON.stringify({ productId: adId, keyword, price, catalogId: ad.referenceKey })
     });
     
     if (!res.ok) {
@@ -1476,6 +1476,23 @@ async function handleShoppingAdSelection() {
     if (result.product) {
       const parsedProduct = result.product;
       parsedProduct.price = price;
+      
+      // Build a robust competitors list that always includes our own store for realistic side-by-side comparison
+      const competitors = [...(result.product.competitors || [])];
+      let ownMallIndex = competitors.findIndex(c => c.name.includes('부럽') || c.name.toLowerCase().includes('boolub'));
+      
+      if (ownMallIndex === -1) {
+        competitors.push({
+          name: '부럽트래블 (자사)',
+          productName: adName,
+          price: price,
+          url: ad.referenceData?.mallProductUrl || '#'
+        });
+        competitors.sort((a, b) => a.price - b.price);
+        ownMallIndex = competitors.findIndex(c => c.name.includes('부럽') || c.name.toLowerCase().includes('boolub'));
+      }
+      
+      parsedProduct.competitors = competitors;
       state.selectedShopProduct = parsedProduct;
       
       elements.shopNoDataMsg.style.display = 'none';
@@ -1483,37 +1500,26 @@ async function handleShoppingAdSelection() {
 
       elements.shopOurPrice.innerText = `₩${price.toLocaleString()}`;
       
-      const minCompetitorPrice = parsedProduct.competitors && parsedProduct.competitors.length > 0 
-        ? Math.min(...parsedProduct.competitors.map(c => c.price))
+      // Min competitor price excluding our own store to find the market minimum
+      const otherCompetitors = competitors.filter(c => !(c.name.includes('부럽') || c.name.toLowerCase().includes('boolub')));
+      const minCompetitorPrice = otherCompetitors.length > 0 
+        ? Math.min(...otherCompetitors.map(c => c.price))
         : price;
       
       elements.shopCompetitorMinPrice.innerText = `₩${minCompetitorPrice.toLocaleString()}`;
 
-      // Calculate Live Search Rank
+      // Calculate Live Search Rank based on sorted list index
       let searchRankText = '분석 불가';
-      const diff = price - minCompetitorPrice;
-      
-      // Let's check if the crawler matches our own mall
-      const ownMallItemIndex = parsedProduct.competitors 
-        ? parsedProduct.competitors.findIndex(c => c.name.includes('부럽') || c.name.toLowerCase().includes('boolub'))
-        : -1;
-      
-      if (ownMallItemIndex !== -1) {
-        searchRankText = `1페이지 ${ownMallItemIndex + 1}위`;
-      } else {
-        // Fallback simulation based on price competitiveness
-        if (diff < -10000) {
-          searchRankText = '1페이지 2위 (우수)';
-        } else if (diff > 10000) {
-          searchRankText = '2페이지 19위 (경쟁력 부족)';
-        } else {
-          searchRankText = '1페이지 8위 (경합)';
-        }
+      if (ownMallIndex !== -1) {
+        const pageNum = Math.floor(ownMallIndex / 5) + 1; // 5 listings per page simulation
+        const pageRank = (ownMallIndex % 5) + 1;
+        searchRankText = `${pageNum}페이지 ${pageRank}위 (${ownMallIndex + 1}위)`;
       }
+      
       elements.shopCurrentRank.innerText = searchRankText;
 
-      renderShopCompetitorsTable(parsedProduct.competitors);
-      drawShoppingPriceChart(price, parsedProduct.competitors || []);
+      renderShopCompetitorsTable(competitors);
+      drawShoppingPriceChart(price, competitors);
       evaluatePriceCompetitiveness(price, minCompetitorPrice);
 
       // Default cost to 70% of sale price
@@ -1580,9 +1586,18 @@ function renderShopCompetitorsTable(competitors) {
 
   competitors.forEach(c => {
     const tr = document.createElement('tr');
+    const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
+    
+    if (isOwn) {
+      tr.style.backgroundColor = 'rgba(255, 107, 107, 0.15)';
+      tr.style.border = '1px solid var(--color-primary)';
+    }
+
     tr.innerHTML = `
-      <td style="font-weight: 700; color: white;">${c.name}</td>
-      <td style="font-size: 13px; color: var(--text-muted);">${c.productName}</td>
+      <td style="font-weight: 700; color: ${isOwn ? 'var(--color-primary)' : 'white'};">
+        ${isOwn ? '⭐ ' : ''}${c.name}
+      </td>
+      <td style="font-size: 13px; color: ${isOwn ? 'white' : 'var(--text-muted)'};">${c.productName}</td>
       <td style="color: var(--color-secondary); font-weight: 600;">₩${c.price.toLocaleString()}</td>
       <td>
         <a href="${c.url}" target="_blank" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 11px;">

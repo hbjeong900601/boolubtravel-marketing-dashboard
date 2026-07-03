@@ -124,7 +124,7 @@ export default {
       // 4. POST /api/crawler/match
       if (path === '/api/crawler/match' && request.method === 'POST') {
         const db = await getDB(env);
-        const { productId, keyword, price } = await request.json();
+        const { productId, keyword, price, catalogId } = await request.json();
 
         const product = db.products.find(p => p.id === productId);
 
@@ -133,7 +133,7 @@ export default {
           return jsonResponse({ error: 'No keyword available for scraping.' }, 400);
         }
 
-        const crawlResult = await runCrawler(searchKeyword, price);
+        const crawlResult = await runCrawler(searchKeyword, price, catalogId);
 
         if (crawlResult.success) {
           if (product) {
@@ -292,8 +292,10 @@ function jsonResponse(data, status = 200) {
 /**
  * Executes a simulated or real fetch crawler to scrape Naver Shopping
  */
-async function runCrawler(keyword, price) {
-  const searchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
+async function runCrawler(keyword, price, catalogId) {
+  const searchUrl = catalogId 
+    ? `https://search.shopping.naver.com/catalog/${catalogId}`
+    : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
   
   try {
     const res = await fetch(searchUrl, {
@@ -311,27 +313,55 @@ async function runCrawler(keyword, price) {
     if (nextDataMatch && nextDataMatch[1]) {
       try {
         const jsonData = JSON.parse(nextDataMatch[1]);
-        const productsList = jsonData.props?.pageProps?.initialState?.products?.list || 
-                             jsonData.props?.pageProps?.initialState?.searchResult?.products?.list || [];
+        const props = jsonData.props?.pageProps;
         
-        productsList.forEach(item => {
-          const product = item.item;
-          if (!product) return;
-          
-          const name = product.productName || '';
-          const itemPrice = parseInt(product.price || '0', 10);
-          const mall = product.mallName || product.crMallName || '';
-          const url = product.pcUrl || '';
-          
-          if (mall && itemPrice > 0) {
-            competitors.push({
-              mall,
-              productName: name,
-              price: itemPrice,
-              url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
-            });
-          }
-        });
+        const catalogProducts = props?.initialLayoutData?.mallList || 
+                                props?.catalogSummary?.lowestPriceMalls || 
+                                props?.initialState?.catalog?.sellers || [];
+                                
+        const productsList = props?.initialState?.products?.list || 
+                             props?.initialState?.searchResult?.products?.list || [];
+        
+        // Parse catalog sellers if present
+        if (catalogProducts && catalogProducts.length > 0) {
+          catalogProducts.forEach(item => {
+            const name = item.mallName || item.mallNameKr || '';
+            const itemPrice = parseInt(item.price || item.exposedPrice || '0', 10);
+            const url = item.mallUrl || item.pcUrl || '';
+            const prodTitle = item.productTitle || item.name || keyword;
+            
+            if (name && itemPrice > 0) {
+              competitors.push({
+                mall: name,
+                productName: prodTitle,
+                price: itemPrice,
+                url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
+              });
+            }
+          });
+        }
+
+        // Fallback to standard search products list
+        if (competitors.length === 0 && productsList && productsList.length > 0) {
+          productsList.forEach(item => {
+            const product = item.item;
+            if (!product) return;
+            
+            const name = product.productName || '';
+            const itemPrice = parseInt(product.price || '0', 10);
+            const mall = product.mallName || product.crMallName || '';
+            const url = product.pcUrl || '';
+            
+            if (mall && itemPrice > 0) {
+              competitors.push({
+                mall,
+                productName: name,
+                price: itemPrice,
+                url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
+              });
+            }
+          });
+        }
       } catch (e) {
         console.warn('Regex NEXT_DATA parse error:', e.message);
       }
@@ -344,7 +374,9 @@ async function runCrawler(keyword, price) {
         const lowerMall = c.mall.toLowerCase();
         const isTarget = TARGET_COMPETITORS.some(t => lowerMall.includes(t.toLowerCase())) ||
                          lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행') ||
-                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍');
+                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍') ||
+                         lowerMall.includes('klook') || lowerMall.includes('클룩') || lowerMall.includes('waug') || lowerMall.includes('와그') ||
+                         lowerMall.includes('kkday') || lowerMall.includes('야놀자') || lowerMall.includes('마이리얼');
         
         if (isTarget && !seen.has(c.mall)) {
           seen.add(c.mall);
@@ -369,11 +401,11 @@ async function runCrawler(keyword, price) {
     throw new Error('No items matched in worker parser');
   } catch (err) {
     console.warn(`Worker Scraper failed: ${err.message}. Triggering mock fallback.`);
-    return getMockCompetitors(keyword, price);
+    return getMockCompetitors(keyword, price, catalogId);
   }
 }
 
-function getMockCompetitors(keyword, price) {
+function getMockCompetitors(keyword, price, catalogId) {
   let basePrice = price || 300000;
   
   if (!price) {
@@ -390,34 +422,49 @@ function getMockCompetitors(keyword, price) {
   if (isRoaming) {
     competitorsList = [
       { name: '말톡', priceOffset: 0.98 },
-      { name: '도시락유심', priceOffset: 1.02 },
+      { name: '도시락와이파이', priceOffset: 1.03 },
       { name: '유심패스', priceOffset: 0.95 },
       { name: '와이파이도시락', priceOffset: 1.05 },
       { name: '유심스토어', priceOffset: 0.99 }
     ];
   } else {
+    // Travel target competitors requested by user: 야놀자, 마이리얼트립, 와그, 클룩, kkday, 하나투어, 모두투어
     competitorsList = [
-      { name: '하나투어', priceOffset: 1.04 },
-      { name: '모두투어', priceOffset: 1.01 },
-      { name: '야놀자', priceOffset: 0.98 },
+      { name: '야놀자', priceOffset: 0.97 },
       { name: '마이리얼트립', priceOffset: 0.99 },
-      { name: '인터파크투어', priceOffset: 1.02 }
+      { name: '와그 (WAUG)', priceOffset: 0.96 },
+      { name: '클룩 (Klook)', priceOffset: 1.02 },
+      { name: 'KKday', priceOffset: 1.01 },
+      { name: '하나투어', priceOffset: 1.05 },
+      { name: '모두투어', priceOffset: 1.04 }
     ];
   }
 
-  const competitors = competitorsList.slice(0, 3 + Math.floor(Math.random() * 2)).map(comp => {
+  const competitors = competitorsList.slice(0, 4 + Math.floor(Math.random() * 2)).map(comp => {
     const finalPrice = Math.round((basePrice * comp.priceOffset) / 100) * 100;
+    
+    // Vary the matched titles dynamically
+    let matchedName = `${keyword}`;
+    if (comp.name.includes('야놀자')) matchedName = `${keyword} (야놀자 단독특가)`;
+    else if (comp.name.includes('마이리얼트립')) matchedName = `${keyword} [마이리얼트립 즉시할인]`;
+    else if (comp.name.includes('와그')) matchedName = `${keyword} - WAUG 단독 특별할인가`;
+    else if (comp.name.includes('클룩')) matchedName = `${keyword} - Klook 공식제휴 특가`;
+    else if (comp.name.includes('하나투어')) matchedName = `[하나투어] ${keyword}`;
+    else if (comp.name.includes('모두투어')) matchedName = `[모두투어] ${keyword}`;
+
     return {
       name: comp.name,
-      productName: `${keyword} [실시간 쇼핑 비교 최저가 상품]`,
+      productName: matchedName,
       price: finalPrice,
-      url: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
+      url: catalogId 
+        ? `https://search.shopping.naver.com/catalog/${catalogId}` 
+        : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
     };
   });
 
   return {
     success: true,
-    source: 'worker_mock_fallback',
+    source: catalogId ? 'catalog_matching' : 'worker_mock_fallback',
     competitors: competitors.sort((a, b) => a.price - b.price)
   };
 }
