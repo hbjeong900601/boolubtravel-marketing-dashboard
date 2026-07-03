@@ -308,14 +308,11 @@ function getMockCompetitors(keyword, price, catalogId) {
     else if (comp.name.includes('하나투어')) matchedName = `[하나투어] ${keyword}`;
     else if (comp.name.includes('모두투어')) matchedName = `[모두투어] ${keyword}`;
 
-    const hasValidCatalog = catalogId && catalogId !== 'undefined' && catalogId !== 'null' && catalogId !== '';
     return {
       name: comp.name,
       productName: matchedName,
       price: finalPrice,
-      url: hasValidCatalog 
-        ? `https://search.shopping.naver.com/catalog/${catalogId}` 
-        : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
+      url: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
     };
   });
 

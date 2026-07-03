@@ -1353,12 +1353,7 @@ async function handleShoppingCampaignSelection() {
 }
 
 function extractProductKeyword(name) {
-  let kw = name.replace(/^[A-Z0-9.\-\s]+/i, ''); // Remove leading labels like B01.
-  kw = kw.replace(/\(.*?\)/g, ''); // Remove parentheses
-  kw = kw.replace(/\[.*?\]/g, ''); // Remove brackets
-  kw = kw.replace(/\s*(그룹|패키지|상품|검색|쇼핑)\s*/g, ''); // Remove generic terms
-  kw = kw.trim();
-  return kw || name;
+  return name ? name.trim() : '';
 }
 
 async function handleShoppingAdgroupSelection() {
@@ -1492,13 +1487,11 @@ async function handleShoppingAdSelection() {
       // Build a robust competitors list that always includes our own store for realistic side-by-side comparison
       const competitors = [...(result.product.competitors || [])];
       
-      // Sanitize competitor redirect URLs to prevent blank search/catalog home pages
+      // Competitor redirect URLs always map to exact search query results of the display product name
       competitors.forEach(c => {
         const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
         if (!isOwn) {
-          if (!c.url || c.url.includes('undefined') || c.url.includes('null') || c.url === 'https://search.shopping.naver.com') {
-            c.url = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
-          }
+          c.url = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
         }
       });
 
