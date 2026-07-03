@@ -346,8 +346,43 @@ async function fetchSettings() {
     // Prefill backend URL input from localStorage
     elements.settingsBackendUrl.value = localStorage.getItem('boolub_backend_url') || '';
 
+    // Load settings from local storage first (local persistence helper)
+    const localSettings = {
+      customerId: localStorage.getItem('boolub_customer_id') || '',
+      apiKey: localStorage.getItem('boolub_api_key') || '',
+      apiSecret: localStorage.getItem('boolub_api_secret') || '',
+      licenseKey: localStorage.getItem('boolub_license_key') || '',
+      naverOpenClientId: localStorage.getItem('boolub_open_client_id') || '',
+      naverOpenClientSecret: localStorage.getItem('boolub_open_client_secret') || ''
+    };
+
     const res = await fetch(`${API_BASE}/api/naver-ads/settings`);
     state.settings = await res.json();
+
+    // If live server settings got wiped out due to memory recycle, restore from local storage
+    if (!state.settings.customerId && localSettings.customerId) {
+      state.settings = { 
+        ...state.settings, 
+        ...localSettings, 
+        isConnected: !!(localSettings.customerId && localSettings.apiKey && localSettings.apiSecret) 
+      };
+      
+      // Auto-sync back to server in background
+      fetch(`${API_BASE}/api/naver-ads/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localSettings)
+      }).catch(e => console.warn('Background settings sync failed:', e));
+    } else {
+      // Sync server settings to local storage
+      if (state.settings.customerId) localStorage.setItem('boolub_customer_id', state.settings.customerId);
+      if (state.settings.apiKey) localStorage.setItem('boolub_api_key', state.settings.apiKey);
+      if (state.settings.apiSecret) localStorage.setItem('boolub_api_secret', state.settings.apiSecret);
+      if (state.settings.licenseKey) localStorage.setItem('boolub_license_key', state.settings.licenseKey);
+      if (state.settings.naverOpenClientId) localStorage.setItem('boolub_open_client_id', state.settings.naverOpenClientId);
+      if (state.settings.naverOpenClientSecret) localStorage.setItem('boolub_open_client_secret', state.settings.naverOpenClientSecret);
+    }
+
     updateConnectionStatusUI();
     
     // Prefill settings form
@@ -1228,6 +1263,15 @@ async function handleSaveSettings(e) {
 
     if (data.settings) {
       state.settings = data.settings;
+      
+      // Save settings to local storage to persist locally
+      localStorage.setItem('boolub_customer_id', customerId);
+      if (apiKey && apiKey !== '••••••••••••••••••••') localStorage.setItem('boolub_api_key', apiKey);
+      if (apiSecret && apiSecret !== '••••••••••••••••••••') localStorage.setItem('boolub_api_secret', apiSecret);
+      if (licenseKey && licenseKey !== '••••••••••••••••••••') localStorage.setItem('boolub_license_key', licenseKey);
+      if (naverOpenClientId && naverOpenClientId !== '••••••••••••••••••••') localStorage.setItem('boolub_open_client_id', naverOpenClientId);
+      if (naverOpenClientSecret && naverOpenClientSecret !== '••••••••••••••••••••') localStorage.setItem('boolub_open_client_secret', naverOpenClientSecret);
+      
       updateConnectionStatusUI();
       
       // Re-trigger campaigns load
@@ -1247,8 +1291,14 @@ async function handleClearSettings() {
 
   showLoader('초기화 및 연동 해제 진행 중...');
 
-  // Reset backend URL in local storage
+  // Reset local storage keys
   localStorage.removeItem('boolub_backend_url');
+  localStorage.removeItem('boolub_customer_id');
+  localStorage.removeItem('boolub_api_key');
+  localStorage.removeItem('boolub_api_secret');
+  localStorage.removeItem('boolub_license_key');
+  localStorage.removeItem('boolub_open_client_id');
+  localStorage.removeItem('boolub_open_client_secret');
   elements.settingsBackendUrl.value = '';
   API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'

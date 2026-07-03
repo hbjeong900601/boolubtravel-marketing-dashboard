@@ -52,6 +52,8 @@ let initialDB = {
     apiKey: "0100000000b5e9b13ea2dab01eb5a8a0783a60f97139b419992a99ce7a793d73b5af7e9a4d",
     apiSecret: "AQAAAAC16bE+otqwHrWooHg6YPlxdufF0xGPdurwueuo8zCUdQ==",
     licenseKey: "",
+    naverOpenClientId: "j04ymgPrCue4jCVqd_YP",
+    naverOpenClientSecret: "twa9kbHa06",
     isConnected: true
   }
 };
