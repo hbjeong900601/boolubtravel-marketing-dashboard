@@ -176,15 +176,16 @@ export default {
       if (path === '/api/naver-ads/settings' && request.method === 'POST') {
         const db = await getDB(env);
         const { customerId, apiKey, apiSecret, licenseKey, naverOpenClientId, naverOpenClientSecret } = await request.json();
+        const prev = db.naverAdsSettings || {};
 
         db.naverAdsSettings = {
-          customerId: customerId || '',
-          apiKey: apiKey || '',
-          apiSecret: apiSecret || '',
-          licenseKey: licenseKey || '',
-          naverOpenClientId: naverOpenClientId || '',
-          naverOpenClientSecret: naverOpenClientSecret || '',
-          isConnected: !!(customerId && apiKey && apiSecret)
+          customerId: customerId !== undefined ? customerId : (prev.customerId || ''),
+          apiKey: apiKey !== undefined ? apiKey : (prev.apiKey || ''),
+          apiSecret: apiSecret !== undefined ? apiSecret : (prev.apiSecret || ''),
+          licenseKey: licenseKey !== undefined ? licenseKey : (prev.licenseKey || ''),
+          naverOpenClientId: naverOpenClientId !== undefined ? naverOpenClientId : (prev.naverOpenClientId || ''),
+          naverOpenClientSecret: naverOpenClientSecret !== undefined ? naverOpenClientSecret : (prev.naverOpenClientSecret || ''),
+          isConnected: !!((customerId !== undefined ? customerId : prev.customerId) && (apiKey !== undefined ? apiKey : prev.apiKey) && (apiSecret !== undefined ? apiSecret : prev.apiSecret))
         };
 
         await saveDB(db, env);

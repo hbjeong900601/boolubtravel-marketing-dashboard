@@ -158,15 +158,16 @@ app.get('/api/naver-ads/settings', (req, res) => {
 app.post('/api/naver-ads/settings', (req, res) => {
   const db = getDB();
   const { customerId, apiKey, apiSecret, licenseKey, naverOpenClientId, naverOpenClientSecret } = req.body;
+  const prev = db.naverAdsSettings || {};
 
   db.naverAdsSettings = {
-    customerId: customerId || '',
-    apiKey: apiKey || '',
-    apiSecret: apiSecret || '',
-    licenseKey: licenseKey || '',
-    naverOpenClientId: naverOpenClientId || '',
-    naverOpenClientSecret: naverOpenClientSecret || '',
-    isConnected: !!(customerId && apiKey && apiSecret)
+    customerId: customerId !== undefined ? customerId : (prev.customerId || ''),
+    apiKey: apiKey !== undefined ? apiKey : (prev.apiKey || ''),
+    apiSecret: apiSecret !== undefined ? apiSecret : (prev.apiSecret || ''),
+    licenseKey: licenseKey !== undefined ? licenseKey : (prev.licenseKey || ''),
+    naverOpenClientId: naverOpenClientId !== undefined ? naverOpenClientId : (prev.naverOpenClientId || ''),
+    naverOpenClientSecret: naverOpenClientSecret !== undefined ? naverOpenClientSecret : (prev.naverOpenClientSecret || ''),
+    isConnected: !!((customerId !== undefined ? customerId : prev.customerId) && (apiKey !== undefined ? apiKey : prev.apiKey) && (apiSecret !== undefined ? apiSecret : prev.apiSecret))
   };
 
   saveDB(db);
