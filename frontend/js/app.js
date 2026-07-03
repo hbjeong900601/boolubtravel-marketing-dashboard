@@ -1924,7 +1924,9 @@ async function runCompetitiveScan() {
               adId: ad.nccAdId,
               adName,
               price,
+              campaignId: campaign.nccCampaignId,
               campaignName: campaign.name,
+              adgroupId: ag.nccAdgroupId,
               adgroupName: ag.name,
               referenceData: ad.referenceData
             });
@@ -1990,7 +1992,9 @@ async function runCompetitiveScan() {
         status,
         competitorCount: competitors.length,
         source: data.source || 'unknown',
+        campaignId: ad.campaignId,
         campaignName: ad.campaignName,
+        adgroupId: ad.adgroupId,
         adgroupName: ad.adgroupName
       });
     } catch (err) {
@@ -2112,15 +2116,38 @@ function renderCompetitiveTable() {
       <td>${item.minCompName}</td>
       <td>${item.competitorCount}개</td>
       <td><span class="comp-strategy-mini">${strategy.emoji} ${strategy.label}</span></td>
-      <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.adId}')">상세 분석</button></td>
+      <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.campaignId}','${item.adgroupId}','${item.adId}')">상세 분석</button></td>
     </tr>`;
   }).join('');
 }
 
-function navigateToShoppingAd(adId) {
-  // Navigate to shopping optimizer tab - user can then drill down
+async function navigateToShoppingAd(campaignId, adgroupId, adId) {
+  // 1. Switch to shopping optimizer tab
   const shopTab = document.querySelector('[data-tab="shopping-optimizer"]');
   if (shopTab) shopTab.click();
+
+  // 2. Wait for campaign dropdown to populate
+  await new Promise(r => setTimeout(r, 300));
+  
+  // Ensure campaigns are loaded
+  if (state.campaigns.length === 0) {
+    await fetchCampaigns();
+  }
+  populateShoppingCampaignDropdown();
+
+  // 3. Select campaign
+  elements.shopCampaignSelect.value = campaignId;
+  await handleShoppingCampaignSelection();
+
+  // 4. Select adgroup
+  await new Promise(r => setTimeout(r, 200));
+  elements.shopAdgroupSelect.value = adgroupId;
+  await handleShoppingAdgroupSelection();
+
+  // 5. Select ad
+  await new Promise(r => setTimeout(r, 200));
+  elements.shopAdSelect.value = adId;
+  await handleShoppingAdSelection();
 }
 
 function renderCompetitiveKPIs() {
