@@ -1908,8 +1908,16 @@ async function runCompetitiveScan() {
         const ads = await adsRes.json();
         
         for (const ad of ads) {
-          const adName = ad.adAttr?.displayProductName || ad.adName || ad.referenceData?.mallProductName || '';
-          const price = ad.referenceData?.price || ad.adAttr?.price || 0;
+          const adName = ad.adAttr?.displayProductName 
+            || ad.referenceData?.productTitle 
+            || ad.referenceData?.productName 
+            || ad.referenceData?.mallProductName 
+            || ad.adName 
+            || '';
+          const price = parseInt(ad.referenceData?.price, 10) 
+            || parseInt(ad.referenceData?.lowPrice, 10) 
+            || parseInt(ad.adAttr?.price, 10) 
+            || 0;
           
           if (adName && price > 0) {
             allAds.push({
