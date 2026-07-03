@@ -443,7 +443,7 @@
             <h3 class="card-title">네이버 쇼핑검색광고 최적화 & 가격비교</h3>
           </div>
           
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px;">
             <div class="form-group">
               <label>1단계: 쇼핑 캠페인 선택 (Type: SHOPPING)</label>
               <select class="select-control" id="shop-campaign-select">
@@ -452,9 +452,16 @@
               </select>
             </div>
             <div class="form-group">
-              <label>2단계: 광고 대상 상품(광고 그룹) 선택</label>
+              <label>2단계: 광고 대상 그룹 선택</label>
               <select class="select-control" id="shop-adgroup-select" disabled>
                 <option value="">광고 그룹을 선택하세요</option>
+                <!-- Filled via JS -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label>3단계: 광고 소재(상품) 선택</label>
+              <select class="select-control" id="shop-ad-select" disabled>
+                <option value="">광고 소재를 선택하세요</option>
                 <!-- Filled via JS -->
               </select>
             </div>
@@ -468,10 +475,14 @@
               <h3 class="card-title">실시간 네이버 쇼핑 경쟁사 가격 추적</h3>
             </div>
             
-            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
               <div>
                 <span style="font-size: 12px; color: var(--text-muted);">자사 판매가격 (부럽트래블)</span>
                 <div style="font-size: 20px; font-weight: 700; color: #00e676; margin-top: 4px;" id="shop-our-price">₩0</div>
+              </div>
+              <div style="text-align: center; border-left: 1px solid rgba(255,255,255,0.1); border-right: 1px solid rgba(255,255,255,0.1);">
+                <span style="font-size: 12px; color: var(--text-muted);">실시간 쇼핑 노출 순위</span>
+                <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-top: 4px;" id="shop-current-rank">분석 중</div>
               </div>
               <div style="text-align: right;">
                 <span style="font-size: 12px; color: var(--text-muted);">경쟁사 최저가</span>
@@ -571,12 +582,16 @@
                   <span style="font-weight: 800; font-size: 26px; color: var(--color-naver-glow);" id="shop-res-roas">350%</span>
                 </div>
               </div>
+
+              <button type="button" class="btn btn-naver" id="shop-sync-bid-btn" style="width: 100%; margin-top: 16px; font-weight: 700;">
+                🎯 네이버 광고 서버에 입찰가 즉시 적용
+              </button>
             </div>
           </div>
         </div>
 
         <div id="shop-no-data-msg" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 8px;">
-          쇼핑 캠페인과 상품(광고 그룹)을 선택하면 실시간 가격 추적 및 최적화 진단이 시작됩니다.
+          쇼핑 캠페인, 광고 그룹, 그리고 개별 광고 소재(소재/상품)를 선택하면 실시간 가격 추적 및 최적화 진단이 시작됩니다.
         </div>
       </section>
 

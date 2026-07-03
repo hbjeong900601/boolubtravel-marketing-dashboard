@@ -209,6 +209,23 @@ export default {
         return jsonResponse(data, 200);
       }
 
+      // 9-2. GET /api/naver-ads/ads
+      if (path === '/api/naver-ads/ads' && request.method === 'GET') {
+        const db = await getDB(env);
+        const adgroupId = url.searchParams.get('adgroupId');
+        const queryParams = adgroupId ? { nccAdgroupId: adgroupId } : {};
+        const data = await proxyNaverAds('GET', '/ncc/ads', queryParams, null, db.naverAdsSettings);
+        return jsonResponse(data, 200);
+      }
+
+      // 10-2. POST /api/naver-ads/adjust-adgroup-bid
+      if (path === '/api/naver-ads/adjust-adgroup-bid' && request.method === 'POST') {
+        const db = await getDB(env);
+        const { adgroupId, bidAmt } = await request.json();
+        const data = await proxyNaverAds('PUT', `/ncc/adgroups/${adgroupId}`, {}, { bidAmt }, db.naverAdsSettings);
+        return jsonResponse(data, 200);
+      }
+
       // 10. POST /api/naver-ads/adjust-bid
       if (path === '/api/naver-ads/adjust-bid' && request.method === 'POST') {
         const db = await getDB(env);

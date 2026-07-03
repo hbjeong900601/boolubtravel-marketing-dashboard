@@ -202,6 +202,31 @@ app.get('/api/naver-ads/keywords', async (req, res) => {
   }
 });
 
+// Fetch ads (materials) in an adgroup
+app.get('/api/naver-ads/ads', async (req, res) => {
+  const { adgroupId } = req.query;
+  try {
+    const ads = await adApi.getAds(adgroupId);
+    res.json(ads);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Adjust adgroup bid
+app.post('/api/naver-ads/adjust-adgroup-bid', async (req, res) => {
+  const { adgroupId, bidAmt } = req.body;
+  if (!adgroupId || bidAmt === undefined) {
+    return res.status(400).json({ error: 'Adgroup ID and bid amount are required.' });
+  }
+  try {
+    const result = await adApi.adjustAdGroupBid(adgroupId, parseInt(bidAmt, 10));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Adjust keyword bid
 app.post('/api/naver-ads/adjust-bid', async (req, res) => {
   const { keywordId, bidAmt } = req.body;

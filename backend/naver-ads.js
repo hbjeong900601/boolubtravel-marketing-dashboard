@@ -113,11 +113,26 @@ class NaverAdsAPI {
   }
 
   /**
+   * Get Ads (Materials)
+   */
+  async getAds(adgroupId) {
+    return this.request('GET', '/ncc/ads', adgroupId ? { nccAdgroupId: adgroupId } : {});
+  }
+
+  /**
    * Adjust Keyword Bid
    */
   async adjustKeywordBid(keywordId, bidAmt) {
     // Naver Ad API requires body updates for keyword bids
     const path = `/ncc/keywords/${keywordId}`;
+    return this.request('PUT', path, {}, { bidAmt });
+  }
+
+  /**
+   * Adjust Ad Group Bid
+   */
+  async adjustAdGroupBid(adgroupId, bidAmt) {
+    const path = `/ncc/adgroups/${adgroupId}`;
     return this.request('PUT', path, {}, { bidAmt });
   }
 
@@ -201,7 +216,9 @@ class NaverAdsAPI {
         { nccCampaignId: 'cam-001', name: '제주도 패키지 검색광고', campaignTp: 'SEARCH', userLimitAmt: 100000, trackingUrl: '', useYn: 'Y' },
         { nccCampaignId: 'cam-002', name: '일본 온천/도시 투어', campaignTp: 'SEARCH', userLimitAmt: 200000, trackingUrl: '', useYn: 'Y' },
         { nccCampaignId: 'cam-003', name: '동남아 허니문 기획전', campaignTp: 'SEARCH', userLimitAmt: 300000, trackingUrl: '', useYn: 'Y' },
-        { nccCampaignId: 'cam-004', name: '유럽 일주/패키지 테마', campaignTp: 'SEARCH', userLimitAmt: 500000, trackingUrl: '', useYn: 'N' }
+        { nccCampaignId: 'cam-004', name: '유럽 일주/패키지 테마', campaignTp: 'SEARCH', userLimitAmt: 500000, trackingUrl: '', useYn: 'N' },
+        { nccCampaignId: 'cam-shop-01', name: 'B01.쇼핑검색(동남아/동북아)', campaignTp: 'SHOPPING', userLimitAmt: 150000, trackingUrl: '', useYn: 'Y' },
+        { nccCampaignId: 'cam-shop-02', name: 'B02.쇼핑검색(이심/기타)', campaignTp: 'SHOPPING', userLimitAmt: 250000, trackingUrl: '', useYn: 'Y' }
       ];
     }
 
@@ -224,6 +241,15 @@ class NaverAdsAPI {
       } else if (campId === 'cam-004') {
         return [
           { nccAdgroupId: 'grp-005', nccCampaignId: campId, name: '유럽 패키지 그룹', bidAmt: 2000, useYn: 'Y' }
+        ];
+      } else if (campId === 'cam-shop-01') {
+        return [
+          { nccAdgroupId: 'grp-shop-01', nccCampaignId: campId, name: '발리 패키지 상품군', bidAmt: 850, useYn: 'Y' },
+          { nccAdgroupId: 'grp-shop-02', nccCampaignId: campId, name: '후쿠오카 료칸 상품군', bidAmt: 1050, useYn: 'Y' }
+        ];
+      } else if (campId === 'cam-shop-02') {
+        return [
+          { nccAdgroupId: 'grp-shop-03', nccCampaignId: campId, name: '일본 로밍 이심 상품군', bidAmt: 600, useYn: 'Y' }
         ];
       }
       return [];
@@ -266,12 +292,43 @@ class NaverAdsAPI {
       return [];
     }
 
+    // 4-2. Ads (Shopping Materials)
+    if (path === '/ncc/ads') {
+      const grpId = queryParams.nccAdgroupId;
+      if (grpId === 'grp-shop-01') {
+        return [
+          { nccAdId: 'ad-shop-001', nccAdgroupId: grpId, name: '발리 풀빌라 5일 허니문 패키지', inspectStatus: 'APPROVED', useYn: 'Y' },
+          { nccAdId: 'ad-shop-002', nccAdgroupId: grpId, name: '발리 스냅 촬영 포함 커플 투어 6일', inspectStatus: 'APPROVED', useYn: 'Y' }
+        ];
+      } else if (grpId === 'grp-shop-02') {
+        return [
+          { nccAdId: 'ad-shop-003', nccAdgroupId: grpId, name: '후쿠오카 유후인 온천 료칸 3일', inspectStatus: 'APPROVED', useYn: 'Y' },
+          { nccAdId: 'ad-shop-004', nccAdgroupId: grpId, name: '후쿠오카 도심 세미더블 패키지', inspectStatus: 'APPROVED', useYn: 'Y' }
+        ];
+      } else if (grpId === 'grp-shop-03') {
+        return [
+          { nccAdId: 'ad-shop-005', nccAdgroupId: grpId, name: '일본 매일 2GB 로밍 데이터 이심(eSIM)', inspectStatus: 'APPROVED', useYn: 'Y' }
+        ];
+      }
+      return [];
+    }
+
     // 5. Adjust Bid
     if (path.startsWith('/ncc/keywords/')) {
       const keywordId = path.split('/').pop();
       console.log(`[SIMULATION] Keyword ${keywordId} bid updated to ${data.bidAmt} KRW`);
       return {
         nccKeywordId: keywordId,
+        bidAmt: data.bidAmt,
+        result: 'SUCCESS_SIMULATED'
+      };
+    }
+
+    if (path.startsWith('/ncc/adgroups/')) {
+      const adgroupId = path.split('/').pop();
+      console.log(`[SIMULATION] Adgroup ${adgroupId} bid updated to ${data.bidAmt} KRW`);
+      return {
+        nccAdgroupId: adgroupId,
         bidAmt: data.bidAmt,
         result: 'SUCCESS_SIMULATED'
       };
