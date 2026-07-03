@@ -91,7 +91,7 @@ app.delete('/api/products/:id', (req, res) => {
 
 // Trigger crawler and update competitor match prices
 app.post('/api/crawler/match', async (req, res) => {
-  const { productId, keyword } = req.body;
+  const { productId, keyword, price } = req.body;
 
   if (!productId) {
     return res.status(400).json({ error: 'Product ID is required.' });
@@ -106,9 +106,9 @@ app.post('/api/crawler/match', async (req, res) => {
     return res.status(400).json({ error: 'No keyword available for scraping.' });
   }
 
-  console.log(`Running crawler for product [${product ? product.name : productId}] using keyword [${searchKeyword}]...`);
+  console.log(`Running crawler for product [${product ? product.name : productId}] using keyword [${searchKeyword}] with target base price [${price || 'default'}]...`);
   
-  const result = await scrapeNaverShopping(searchKeyword);
+  const result = await scrapeNaverShopping(searchKeyword, price);
 
   if (result.success) {
     if (product) {
@@ -125,7 +125,7 @@ app.post('/api/crawler/match', async (req, res) => {
       product: product || {
         id: productId,
         name: searchKeyword,
-        price: 0, // Will be filled dynamically by frontend
+        price: price || 0,
         keywords: [searchKeyword],
         competitors: result.competitors,
         lastCrawled: new Date().toISOString()

@@ -124,7 +124,7 @@ export default {
       // 4. POST /api/crawler/match
       if (path === '/api/crawler/match' && request.method === 'POST') {
         const db = await getDB(env);
-        const { productId, keyword } = await request.json();
+        const { productId, keyword, price } = await request.json();
 
         const product = db.products.find(p => p.id === productId);
 
@@ -133,7 +133,7 @@ export default {
           return jsonResponse({ error: 'No keyword available for scraping.' }, 400);
         }
 
-        const crawlResult = await runCrawler(searchKeyword);
+        const crawlResult = await runCrawler(searchKeyword, price);
 
         if (crawlResult.success) {
           if (product) {
@@ -147,7 +147,7 @@ export default {
             product: product || {
               id: productId,
               name: searchKeyword,
-              price: 0, // Will be filled dynamically by frontend
+              price: price || 0,
               keywords: [searchKeyword],
               competitors: crawlResult.competitors,
               lastCrawled: new Date().toISOString()
@@ -292,12 +292,10 @@ function jsonResponse(data, status = 200) {
 /**
  * Executes a simulated or real fetch crawler to scrape Naver Shopping
  */
-async function runCrawler(keyword) {
+async function runCrawler(keyword, price) {
   const searchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
   
   try {
-    // Workers can make outbound fetches, but standard scraping might get CAPTCHAd.
-    // We try to request and find patterns inside the HTML.
     const res = await fetch(searchUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -307,8 +305,6 @@ async function runCrawler(keyword) {
     if (!res.ok) throw new Error('Naver response not OK');
     const html = await res.text();
     
-    // Cloudflare Workers doesn't have Cheerio, but we can do regular expression extraction
-    // on __NEXT_DATA__ JSON script or basic HTML tags to find prices.
     const competitors = [];
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     
@@ -323,15 +319,15 @@ async function runCrawler(keyword) {
           if (!product) return;
           
           const name = product.productName || '';
-          const price = parseInt(product.price || '0', 10);
+          const itemPrice = parseInt(product.price || '0', 10);
           const mall = product.mallName || product.crMallName || '';
           const url = product.pcUrl || '';
           
-          if (mall && price > 0) {
+          if (mall && itemPrice > 0) {
             competitors.push({
               mall,
               productName: name,
-              price,
+              price: itemPrice,
               url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
             });
           }
@@ -347,7 +343,8 @@ async function runCrawler(keyword) {
       competitors.forEach(c => {
         const lowerMall = c.mall.toLowerCase();
         const isTarget = TARGET_COMPETITORS.some(t => lowerMall.includes(t.toLowerCase())) ||
-                         lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행');
+                         lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행') ||
+                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍');
         
         if (isTarget && !seen.has(c.mall)) {
           seen.add(c.mall);
@@ -372,31 +369,47 @@ async function runCrawler(keyword) {
     throw new Error('No items matched in worker parser');
   } catch (err) {
     console.warn(`Worker Scraper failed: ${err.message}. Triggering mock fallback.`);
-    return getMockCompetitors(keyword);
+    return getMockCompetitors(keyword, price);
   }
 }
 
-function getMockCompetitors(keyword) {
-  let basePrice = 300000;
-  if (keyword.includes('제주')) basePrice = 290000;
-  else if (keyword.includes('후쿠오카')) basePrice = 440000;
-  else if (keyword.includes('발리')) basePrice = 1220000;
-  else if (keyword.includes('오사카')) basePrice = 350000;
-  else if (keyword.includes('유럽')) basePrice = 3400000;
+function getMockCompetitors(keyword, price) {
+  let basePrice = price || 300000;
+  
+  if (!price) {
+    if (keyword.includes('제주')) basePrice = 290000;
+    else if (keyword.includes('후쿠오카')) basePrice = 440000;
+    else if (keyword.includes('발리')) basePrice = 1220000;
+    else if (keyword.includes('오사카')) basePrice = 350000;
+    else if (keyword.includes('유럽')) basePrice = 3400000;
+  }
 
-  const competitorsList = [
-    { name: '하나투어', priceOffset: 1.04 },
-    { name: '모두투어', priceOffset: 1.01 },
-    { name: '야놀자', priceOffset: 0.98 },
-    { name: '마이리얼트립', priceOffset: 0.99 },
-    { name: '인터파크투어', priceOffset: 1.02 }
-  ];
+  const isRoaming = keyword.includes('이심') || keyword.includes('esim') || keyword.includes('유심') || keyword.includes('로밍') || keyword.includes('데이터');
+
+  let competitorsList = [];
+  if (isRoaming) {
+    competitorsList = [
+      { name: '말톡', priceOffset: 0.98 },
+      { name: '도시락유심', priceOffset: 1.02 },
+      { name: '유심패스', priceOffset: 0.95 },
+      { name: '와이파이도시락', priceOffset: 1.05 },
+      { name: '유심스토어', priceOffset: 0.99 }
+    ];
+  } else {
+    competitorsList = [
+      { name: '하나투어', priceOffset: 1.04 },
+      { name: '모두투어', priceOffset: 1.01 },
+      { name: '야놀자', priceOffset: 0.98 },
+      { name: '마이리얼트립', priceOffset: 0.99 },
+      { name: '인터파크투어', priceOffset: 1.02 }
+    ];
+  }
 
   const competitors = competitorsList.slice(0, 3 + Math.floor(Math.random() * 2)).map(comp => {
-    const finalPrice = Math.round((basePrice * comp.priceOffset) / 1000) * 1000;
+    const finalPrice = Math.round((basePrice * comp.priceOffset) / 100) * 100;
     return {
       name: comp.name,
-      productName: `${keyword} 특가 패키지 [실시간 가격비교]`,
+      productName: `${keyword} [실시간 쇼핑 비교 최저가 상품]`,
       price: finalPrice,
       url: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
     };

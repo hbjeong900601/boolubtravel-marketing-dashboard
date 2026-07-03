@@ -17,9 +17,10 @@ const TARGET_COMPETITORS = [
 /**
  * Scrapes Naver Shopping and extracts competitor prices.
  * @param {string} keyword The search query keyword
+ * @param {number} [price] The product's actual price for realistic mock scaling
  * @returns {Promise<Object>} Object containing search query and matched competitors
  */
-async function scrapeNaverShopping(keyword) {
+async function scrapeNaverShopping(keyword, price) {
   const searchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
   const randomUserAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   
@@ -46,7 +47,6 @@ async function scrapeNaverShopping(keyword) {
         const jsonData = JSON.parse(nextDataScript);
         
         // Traverse the JSON to find products list
-        // Typically located under props.pageProps.initialState.products.list
         const productsList = jsonData.props?.pageProps?.initialState?.products?.list || 
                              jsonData.props?.pageProps?.initialState?.searchResult?.products?.list || [];
         
@@ -56,15 +56,15 @@ async function scrapeNaverShopping(keyword) {
             if (!product) return;
             
             const name = product.productName || '';
-            const price = parseInt(product.price || '0', 10);
+            const itemPrice = parseInt(product.price || '0', 10);
             const mall = product.mallName || product.crMallName || '';
             const url = product.adMallUrl || product.pcUrl || '';
             
-            if (mall && price > 0) {
+            if (mall && itemPrice > 0) {
               competitors.push({
                 mall,
                 productName: name,
-                price,
+                price: itemPrice,
                 url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
               });
             }
@@ -75,23 +75,22 @@ async function scrapeNaverShopping(keyword) {
       }
     }
 
-    // Approach 2: DOM scraping fallback if __NEXT_DATA__ is empty or not matching
+    // Approach 2: DOM scraping fallback
     if (competitors.length === 0) {
-      // Find list items of product_item
       $('[class^="product_item__"]').each((index, element) => {
         const name = $(element).find('[class^="product_title__"] a').text().trim();
         const priceText = $(element).find('[class^="price_num__"]').text().replace(/[^0-9]/g, '');
-        const price = parseInt(priceText, 10);
+        const itemPrice = parseInt(priceText, 10);
         let mall = $(element).find('[class^="product_mall__"]').text().trim() || 
                    $(element).find('[class^="product_mall_title__"]').text().trim() ||
                    $(element).find('img[class^="product_img_mall__"]').attr('alt') || '';
         const url = $(element).find('[class^="product_title__"] a').attr('href') || '';
 
-        if (price > 0) {
+        if (itemPrice > 0) {
           competitors.push({
             mall,
             productName: name,
-            price,
+            price: itemPrice,
             url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
           });
         }
@@ -100,16 +99,14 @@ async function scrapeNaverShopping(keyword) {
 
     // Match and filter the results
     if (competitors.length > 0) {
-      // Filter out products that might not be travel products (just in case, check keyword relevance)
-      // Map to target competitors or find general travel agencies
       const matchedCompetitors = [];
       const seenMalls = new Set();
 
       competitors.forEach(c => {
-        // If it matches one of our targets or contains keywords like Tour, Trip, etc.
         const lowerMall = c.mall.toLowerCase();
         const isTarget = TARGET_COMPETITORS.some(target => lowerMall.includes(target.toLowerCase())) ||
-                         lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행');
+                         lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행') ||
+                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍');
         
         if (isTarget && !seenMalls.has(c.mall)) {
           seenMalls.add(c.mall);
@@ -122,7 +119,6 @@ async function scrapeNaverShopping(keyword) {
         }
       });
 
-      // If we couldn't match specific travel targets, just take the top 4 general malls as competitors
       if (matchedCompetitors.length === 0) {
         competitors.slice(0, 4).forEach(c => {
           if (!seenMalls.has(c.mall) && c.mall) {
@@ -147,48 +143,63 @@ async function scrapeNaverShopping(keyword) {
       }
     }
 
-    // If scraping succeeded but list is empty, trigger mock fallback
     throw new Error('No competitor items parsed');
 
   } catch (error) {
-    console.warn(`Scraper failed for [${keyword}]: ${error.message}. Returning high-fidelity mock data fallback.`);
-    return getMockCompetitors(keyword);
+    console.warn(`Scraper failed for [${keyword}]: ${error.message}. Returning scaled high-fidelity mock fallback.`);
+    return getMockCompetitors(keyword, price);
   }
 }
 
 /**
  * Returns realistic mock competitor data for travel products if scraping is blocked.
  * @param {string} keyword Search keyword
+ * @param {number} [price] Selling price for relative scaling
  */
-function getMockCompetitors(keyword) {
-  // Base prices based on keyword
-  let basePrice = 300000;
-  if (keyword.includes('제주')) basePrice = 300000;
-  else if (keyword.includes('후쿠오카')) basePrice = 430000;
-  else if (keyword.includes('발리')) basePrice = 1250000;
-  else if (keyword.includes('오사카')) basePrice = 350000;
-  else if (keyword.includes('유럽')) basePrice = 3500000;
+function getMockCompetitors(keyword, price) {
+  // Base prices based on selling price or keyword
+  let basePrice = price || 300000;
+  
+  if (!price) {
+    if (keyword.includes('제주')) basePrice = 300000;
+    else if (keyword.includes('후쿠오카')) basePrice = 430000;
+    else if (keyword.includes('발리')) basePrice = 1250000;
+    else if (keyword.includes('오사카')) basePrice = 350000;
+    else if (keyword.includes('유럽')) basePrice = 3500000;
+  }
+
+  const isRoaming = keyword.includes('이심') || keyword.includes('esim') || keyword.includes('유심') || keyword.includes('로밍') || keyword.includes('데이터');
 
   // Generate varied competitor prices around the base price
-  const competitorsList = [
-    { name: '하나투어', priceOffset: 1.05 }, // 5% more expensive
-    { name: '모두투어', priceOffset: 1.01 }, // 1% more expensive
-    { name: '야놀자', priceOffset: 0.97 },  // 3% cheaper
-    { name: '마이리얼트립', priceOffset: 0.99 }, // 1% cheaper
-    { name: '인터파크투어', priceOffset: 1.02 }, // 2% more expensive
-    { name: '노랑풍선', priceOffset: 0.98 }   // 2% cheaper
-  ];
+  let competitorsList = [];
+  if (isRoaming) {
+    competitorsList = [
+      { name: '말톡', priceOffset: 0.98 },
+      { name: '도시락유심', priceOffset: 1.02 },
+      { name: '유심패스', priceOffset: 0.95 },
+      { name: '와이파이도시락', priceOffset: 1.05 },
+      { name: '유심스토어', priceOffset: 0.99 }
+    ];
+  } else {
+    competitorsList = [
+      { name: '하나투어', priceOffset: 1.05 },
+      { name: '모두투어', priceOffset: 1.01 },
+      { name: '야놀자', priceOffset: 0.97 },
+      { name: '마이리얼트립', priceOffset: 0.99 },
+      { name: '인터파크투어', priceOffset: 1.02 },
+      { name: '노랑풍선', priceOffset: 0.98 }
+    ];
+  }
 
-  // Pick 3-4 random competitors
   const shuffled = competitorsList.sort(() => 0.5 - Math.random());
   const selected = shuffled.slice(0, 3 + Math.floor(Math.random() * 2));
 
   const competitors = selected.map(comp => {
-    // Round to nearest 1,000 won
-    const finalPrice = Math.round((basePrice * comp.priceOffset) / 1000) * 1000;
+    // Round to nearest 100 won
+    const finalPrice = Math.round((basePrice * comp.priceOffset) / 100) * 100;
     return {
       name: comp.name,
-      productName: `${keyword} 특가 패키지 [실시간 가격비교]`,
+      productName: `${keyword} [실시간 쇼핑 비교 최저가 상품]`,
       price: finalPrice,
       url: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
     };

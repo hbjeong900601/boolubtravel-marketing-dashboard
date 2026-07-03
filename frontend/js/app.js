@@ -1385,7 +1385,7 @@ async function handleShoppingAdgroupSelection() {
       state.shopAds.forEach(ad => {
         const opt = document.createElement('option');
         opt.value = ad.nccAdId;
-        opt.innerText = ad.name || ad.adattr?.productName || '이름 없음';
+        opt.innerText = ad.name || ad.ad?.productName || ad.adattr?.productName || '이름 없음';
         select.appendChild(opt);
       });
     }
@@ -1447,7 +1447,7 @@ async function handleShoppingAdSelection() {
     const res = await fetch(`${API_BASE}/api/crawler/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: adId, keyword })
+      body: JSON.stringify({ productId: adId, keyword, price })
     });
     
     if (!res.ok) {
