@@ -133,7 +133,15 @@ export default {
           return jsonResponse({ error: 'No keyword available for scraping.' }, 400);
         }
 
-        const crawlResult = await runCrawler(searchKeyword, price, catalogId);
+        const settings = db.naverAdsSettings || {};
+
+        const crawlResult = await runCrawler(
+          searchKeyword, 
+          price, 
+          catalogId, 
+          settings.naverOpenClientId, 
+          settings.naverOpenClientSecret
+        );
 
         if (crawlResult.success) {
           if (product) {
@@ -167,13 +175,15 @@ export default {
       // 6. POST /api/naver-ads/settings
       if (path === '/api/naver-ads/settings' && request.method === 'POST') {
         const db = await getDB(env);
-        const { customerId, apiKey, apiSecret, licenseKey } = await request.json();
+        const { customerId, apiKey, apiSecret, licenseKey, naverOpenClientId, naverOpenClientSecret } = await request.json();
 
         db.naverAdsSettings = {
           customerId: customerId || '',
           apiKey: apiKey || '',
           apiSecret: apiSecret || '',
           licenseKey: licenseKey || '',
+          naverOpenClientId: naverOpenClientId || '',
+          naverOpenClientSecret: naverOpenClientSecret || '',
           isConnected: !!(customerId && apiKey && apiSecret)
         };
 
@@ -289,10 +299,53 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-/**
- * Executes a simulated or real fetch crawler to scrape Naver Shopping
- */
-async function runCrawler(keyword, price, catalogId) {
+async function runCrawler(keyword, price, catalogId, openClientId, openClientSecret) {
+  // If Naver Open API credentials are provided, use the official API!
+  if (openClientId && openClientSecret && openClientId !== '••••••••••••••••••••' && openClientSecret !== '••••••••••••••••••••') {
+    console.log(`[Worker] Using Naver Open API to search for [${keyword}]...`);
+    try {
+      const apiRes = await fetch(`https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(keyword)}&display=40&sort=sim`, {
+        headers: {
+          'X-Naver-Client-Id': openClientId,
+          'X-Naver-Client-Secret': openClientSecret,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (apiRes.ok) {
+        const apiData = await apiRes.json();
+        if (apiData.items && apiData.items.length > 0) {
+          const competitors = apiData.items.map(item => {
+            const name = item.mallName || '네이버쇼핑';
+            const cleanTitle = item.title.replace(/<[^>]*>/g, '');
+            const itemPrice = parseInt(item.lprice, 10) || 0;
+            return {
+              name,
+              productName: cleanTitle,
+              price: itemPrice,
+              url: item.link
+            };
+          }).filter(c => c.price > 0);
+
+          if (competitors.length > 0) {
+            console.log(`[Worker] Naver Open API returned ${competitors.length} real shopping search results!`);
+            return {
+              success: true,
+              source: 'naver_open_api',
+              competitors: competitors.sort((a, b) => a.price - b.price)
+            };
+          }
+        }
+      } else {
+        const errText = await apiRes.text();
+        console.warn('[Worker] Naver Open API error:', errText);
+      }
+    } catch (apiErr) {
+      console.warn('[Worker] Naver Open API call failed, falling back to scraper/mock:', apiErr.message);
+    }
+  }
+
+  // Fallback to scraper/catalog comparison page
   const searchUrl = catalogId 
     ? `https://search.shopping.naver.com/catalog/${catalogId}`
     : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;

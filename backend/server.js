@@ -106,9 +106,17 @@ app.post('/api/crawler/match', async (req, res) => {
     return res.status(400).json({ error: 'No keyword available for scraping.' });
   }
 
+  const settings = db.naverAdsSettings || {};
+
   console.log(`Running crawler for product [${product ? product.name : productId}] using keyword [${searchKeyword}] with target base price [${price || 'default'}] and catalogId [${catalogId || 'none'}]...`);
   
-  const result = await scrapeNaverShopping(searchKeyword, price, catalogId);
+  const result = await scrapeNaverShopping(
+    searchKeyword, 
+    price, 
+    catalogId, 
+    settings.naverOpenClientId, 
+    settings.naverOpenClientSecret
+  );
 
   if (result.success) {
     if (product) {
@@ -149,13 +157,15 @@ app.get('/api/naver-ads/settings', (req, res) => {
 // Save Naver Ad settings
 app.post('/api/naver-ads/settings', (req, res) => {
   const db = getDB();
-  const { customerId, apiKey, apiSecret, licenseKey } = req.body;
+  const { customerId, apiKey, apiSecret, licenseKey, naverOpenClientId, naverOpenClientSecret } = req.body;
 
   db.naverAdsSettings = {
     customerId: customerId || '',
     apiKey: apiKey || '',
     apiSecret: apiSecret || '',
     licenseKey: licenseKey || '',
+    naverOpenClientId: naverOpenClientId || '',
+    naverOpenClientSecret: naverOpenClientSecret || '',
     isConnected: !!(customerId && apiKey && apiSecret)
   };
 

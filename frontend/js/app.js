@@ -105,6 +105,8 @@ const elements = {
   settingsApiKey: document.getElementById('settings-api-key'),
   settingsApiSecret: document.getElementById('settings-api-secret'),
   settingsLicenseKey: document.getElementById('settings-license-key'),
+  settingsOpenClientId: document.getElementById('settings-open-client-id'),
+  settingsOpenClientSecret: document.getElementById('settings-open-client-secret'),
   clearSettingsBtn: document.getElementById('clear-settings-btn'),
 
   // Tab 4-2: Shopping Optimizer
@@ -342,6 +344,8 @@ async function fetchSettings() {
     elements.settingsApiKey.value = state.settings.apiKey ? '••••••••••••••••••••' : '';
     elements.settingsApiSecret.value = state.settings.apiSecret ? '••••••••••••••••••••' : '';
     elements.settingsLicenseKey.value = state.settings.licenseKey ? '••••••••••••••••••••' : '';
+    elements.settingsOpenClientId.value = state.settings.naverOpenClientId ? '••••••••••••••••••••' : '';
+    elements.settingsOpenClientSecret.value = state.settings.naverOpenClientSecret ? '••••••••••••••••••••' : '';
   } catch (err) {
     console.error('Failed to fetch settings:', err);
   }
@@ -1164,6 +1168,8 @@ async function handleSaveSettings(e) {
   const apiKey = elements.settingsApiKey.value.trim();
   const apiSecret = elements.settingsApiSecret.value.trim();
   const licenseKey = elements.settingsLicenseKey.value.trim();
+  const naverOpenClientId = elements.settingsOpenClientId.value.trim();
+  const naverOpenClientSecret = elements.settingsOpenClientSecret.value.trim();
 
   // Save backend URL to localStorage
   if (backendUrl) {
@@ -1189,6 +1195,8 @@ async function handleSaveSettings(e) {
   if (apiKey && apiKey !== '••••••••••••••••••••') payload.apiKey = apiKey;
   if (apiSecret && apiSecret !== '••••••••••••••••••••') payload.apiSecret = apiSecret;
   if (licenseKey && licenseKey !== '••••••••••••••••••••') payload.licenseKey = licenseKey;
+  if (naverOpenClientId && naverOpenClientId !== '••••••••••••••••••••') payload.naverOpenClientId = naverOpenClientId;
+  if (naverOpenClientSecret && naverOpenClientSecret !== '••••••••••••••••••••') payload.naverOpenClientSecret = naverOpenClientSecret;
 
   showLoader('네이버 API 자격증명 저장 및 HMAC 접속 연동 중...');
 
@@ -1243,7 +1251,9 @@ async function handleClearSettings() {
         customerId: '',
         apiKey: '',
         apiSecret: '',
-        licenseKey: ''
+        licenseKey: '',
+        naverOpenClientId: '',
+        naverOpenClientSecret: ''
       })
     });
 
@@ -1259,6 +1269,8 @@ async function handleClearSettings() {
       elements.settingsApiKey.value = '';
       elements.settingsApiSecret.value = '';
       elements.settingsLicenseKey.value = '';
+      elements.settingsOpenClientId.value = '';
+      elements.settingsOpenClientSecret.value = '';
       
       // Reload campaigns
       await fetchCampaigns();

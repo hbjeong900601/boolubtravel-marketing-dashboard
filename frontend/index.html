@@ -624,6 +624,23 @@
                 <label for="settings-license-key">API 라이선스 키 (Access License Key)</label>
                 <input type="password" class="input-control" id="settings-license-key" placeholder="네이버 광고센터에서 발급받은 라이선스 키">
               </div>
+              
+              <!-- Naver Open API settings for precise Shopping search -->
+              <div style="border-top: 1px solid var(--border-color); margin: 24px 0 16px 0; padding-top: 16px;">
+                <h4 style="margin-bottom: 8px; color: var(--color-naver);">네이버 쇼핑 오픈 API 연동 (실시간 순위/경쟁사 파싱용 - 선택사항)</h4>
+                <p style="font-size: 12px; color: var(--text-muted); line-height: 1.4; margin-bottom: 12px;">
+                  네이버 쇼핑 실시간 경쟁사 가격 비교 및 순위를 캡차 차단 없이 100% 정확하게 실시간 수집하려면 네이버 오픈 API 키 등록이 필요합니다. (무료 제공)
+                </p>
+              </div>
+              <div class="form-group">
+                <label for="settings-open-client-id">네이버 오픈 API Client ID</label>
+                <input type="password" class="input-control" id="settings-open-client-id" placeholder="네이버 개발자 센터에서 발급받은 Client ID">
+              </div>
+              <div class="form-group">
+                <label for="settings-open-client-secret">네이버 오픈 API Client Secret</label>
+                <input type="password" class="input-control" id="settings-open-client-secret" placeholder="네이버 개발자 센터에서 발급받은 Client Secret">
+              </div>
+              
               <div style="display: flex; gap: 12px; margin-top: 24px;">
                 <button type="submit" class="btn btn-naver" id="save-settings-btn">자격증명 저장 및 연동하기</button>
                 <button type="button" class="btn btn-secondary" id="clear-settings-btn">연동 해제</button>
@@ -637,13 +654,23 @@
               <h3 class="card-title">네이버 API 자격증명 발급 안내</h3>
             </div>
             <div style="font-size: 13px; display: flex; flex-direction: column; gap: 14px;">
-              <p>네이버 검색광고 API는 실제 광고 계정이 있어야 사용이 가능합니다. 아래 순서에 따라 키를 발급받을 수 있습니다.</p>
-              <ol style="margin-left: 20px; display: flex; flex-direction: column; gap: 8px; color: var(--text-muted);">
-                <li>1. <strong><a href="https://searchad.naver.com/" target="_blank" style="color: var(--color-naver); text-decoration: underline;">네이버 검색광고 센터</a></strong> 로그인</li>
-                <li>2. 상단 메뉴의 <strong>[도구] - [서비스 API/광고 API]</strong> 클릭</li>
-                <li>3. <strong>API 라이선스 및 키 발급 신청</strong> 완료</li>
-                <li>4. 화면에 표시되는 <strong>고객 ID, API Key, Secret Key, License Key</strong> 복사</li>
-                <li>5. 본 설정 창에 붙여넣기 한 뒤 저장</li>
+              <p>네이버 검색광고 API 및 쇼핑 오픈 API는 아래 순서에 따라 발급받을 수 있습니다.</p>
+              
+              <p style="margin-bottom: 4px; font-weight: 700; color: var(--color-naver);">1. 검색광고 API 발급 (캠페인/광고그룹/입찰 연동)</p>
+              <ol style="margin-left: 20px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; color: var(--text-muted);">
+                <li>① <strong><a href="https://searchad.naver.com/" target="_blank" style="color: var(--color-naver); text-decoration: underline;">네이버 검색광고 센터</a></strong> 로그인</li>
+                <li>② 상단 메뉴 <strong>[도구] - [서비스 API/광고 API]</strong> 클릭</li>
+                <li>③ 라이선스 동의 및 키 생성 진행</li>
+                <li>④ 발급된 <strong>고객 ID, 액세스 API Key, Secret Key, 라이선스 키</strong>를 기입</li>
+              </ol>
+
+              <p style="margin-bottom: 4px; font-weight: 700; color: var(--color-naver);">2. 쇼핑 검색 오픈 API 발급 (실시간 순위/경쟁사 매칭)</p>
+              <ol style="margin-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--text-muted);">
+                <li>① <strong><a href="https://developers.naver.com/" target="_blank" style="color: var(--color-naver); text-decoration: underline;">네이버 개발자 센터</a></strong> 로그인 후 [Application 등록]</li>
+                <li>② 사용 API에서 <strong>[검색]</strong>을 추가</li>
+                <li>③ 비로그인 오픈 API 서비스 환경에 <strong>[WEB 설정]</strong> 추가</li>
+                <li>④ 웹 주소는 임의의 URL(예: <code>http://localhost:3000</code>) 등록</li>
+                <li>⑤ 발급된 <strong>Client ID 및 Client Secret</strong>을 입력</li>
               </ol>
               <div class="insight-item positive" style="margin-top: 10px;">
                 <div class="insight-icon">🔒</div>

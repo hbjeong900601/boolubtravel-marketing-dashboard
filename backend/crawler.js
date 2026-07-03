@@ -19,10 +19,57 @@ const TARGET_COMPETITORS = [
  * @param {string} keyword The search query keyword
  * @param {number} [price] The product's actual price for realistic mock scaling
  * @param {string} [catalogId] Naver Shopping catalog ID
+ * @param {string} [openClientId] Naver Open API Client ID
+ * @param {string} [openClientSecret] Naver Open API Client Secret
  * @returns {Promise<Object>} Object containing search query and matched competitors
  */
-async function scrapeNaverShopping(keyword, price, catalogId) {
-  // If catalogId is provided, scrape the catalog comparison page directly!
+async function scrapeNaverShopping(keyword, price, catalogId, openClientId, openClientSecret) {
+  // If Naver Open API credentials are provided, use the official API!
+  if (openClientId && openClientSecret && openClientId !== '••••••••••••••••••••' && openClientSecret !== '••••••••••••••••••••') {
+    console.log(`Using Naver Open API to search for [${keyword}]...`);
+    try {
+      const apiRes = await axios.get('https://openapi.naver.com/v1/search/shop.json', {
+        params: {
+          query: keyword,
+          display: 40,
+          sort: 'sim'
+        },
+        headers: {
+          'X-Naver-Client-Id': openClientId,
+          'X-Naver-Client-Secret': openClientSecret
+        },
+        timeout: 6000
+      });
+
+      if (apiRes.data && apiRes.data.items && apiRes.data.items.length > 0) {
+        const competitors = apiRes.data.items.map(item => {
+          const name = item.mallName || '네이버쇼핑';
+          const cleanTitle = item.title.replace(/<[^>]*>/g, '');
+          const itemPrice = parseInt(item.lprice, 10) || 0;
+          return {
+            name,
+            productName: cleanTitle,
+            price: itemPrice,
+            url: item.link
+          };
+        }).filter(c => c.price > 0);
+
+        if (competitors.length > 0) {
+          console.log(`Naver Open API returned ${competitors.length} real shopping search results!`);
+          return {
+            keyword,
+            success: true,
+            source: 'naver_open_api',
+            competitors: competitors.sort((a, b) => a.price - b.price)
+          };
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Naver Open API call failed, falling back to scraper/mock:', apiErr.message);
+    }
+  }
+
+  // Fallback to scraper/catalog comparison page
   const searchUrl = catalogId 
     ? `https://search.shopping.naver.com/catalog/${catalogId}`
     : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
