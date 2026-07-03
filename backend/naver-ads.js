@@ -297,17 +297,17 @@ class NaverAdsAPI {
       const grpId = queryParams.nccAdgroupId;
       if (grpId === 'grp-shop-01') {
         return [
-          { nccAdId: 'ad-shop-001', nccAdgroupId: grpId, name: '발리 풀빌라 5일 허니문 패키지', inspectStatus: 'APPROVED', useYn: 'Y' },
-          { nccAdId: 'ad-shop-002', nccAdgroupId: grpId, name: '발리 스냅 촬영 포함 커플 투어 6일', inspectStatus: 'APPROVED', useYn: 'Y' }
+          { nccAdId: 'ad-shop-001', nccAdgroupId: grpId, name: '발리 풀빌라 5일 허니문 패키지', referenceData: { productName: '발리 풀빌라 5일 허니문 패키지', lowPrice: '1200000' }, inspectStatus: 'APPROVED', useYn: 'Y' },
+          { nccAdId: 'ad-shop-002', nccAdgroupId: grpId, name: '발리 스냅 촬영 포함 커플 투어 6일', referenceData: { productName: '발리 스냅 촬영 포함 커플 투어 6일', lowPrice: '850000' }, inspectStatus: 'APPROVED', useYn: 'Y' }
         ];
       } else if (grpId === 'grp-shop-02') {
         return [
-          { nccAdId: 'ad-shop-003', nccAdgroupId: grpId, name: '후쿠오카 유후인 온천 료칸 3일', inspectStatus: 'APPROVED', useYn: 'Y' },
-          { nccAdId: 'ad-shop-004', nccAdgroupId: grpId, name: '후쿠오카 도심 세미더블 패키지', inspectStatus: 'APPROVED', useYn: 'Y' }
+          { nccAdId: 'ad-shop-003', nccAdgroupId: grpId, name: '후쿠오카 유후인 온천 료칸 3일', referenceData: { productName: '후쿠오카 유후인 온천 료칸 3일', lowPrice: '450000' }, inspectStatus: 'APPROVED', useYn: 'Y' },
+          { nccAdId: 'ad-shop-004', nccAdgroupId: grpId, name: '후쿠오카 도심 세미더블 패키지', referenceData: { productName: '후쿠오카 도심 세미더블 패키지', lowPrice: '380000' }, inspectStatus: 'APPROVED', useYn: 'Y' }
         ];
       } else if (grpId === 'grp-shop-03') {
         return [
-          { nccAdId: 'ad-shop-005', nccAdgroupId: grpId, name: '일본 매일 2GB 로밍 데이터 이심(eSIM)', inspectStatus: 'APPROVED', useYn: 'Y' }
+          { nccAdId: 'ad-shop-005', nccAdgroupId: grpId, name: '일본 매일 2GB 로밍 데이터 이심(eSIM)', referenceData: { productName: '일본 매일 2GB 로밍 데이터 이심(eSIM)', lowPrice: '14500' }, inspectStatus: 'APPROVED', useYn: 'Y' }
         ];
       }
       return [];

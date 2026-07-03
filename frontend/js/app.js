@@ -1385,7 +1385,13 @@ async function handleShoppingAdgroupSelection() {
       state.shopAds.forEach(ad => {
         const opt = document.createElement('option');
         opt.value = ad.nccAdId;
-        opt.innerText = ad.name || ad.ad?.productName || ad.adattr?.productName || '이름 없음';
+        const displayName = ad.referenceData?.productName || 
+                            ad.referenceData?.productTitle || 
+                            ad.name || 
+                            ad.ad?.productName || 
+                            ad.adattr?.productName || 
+                            '이름 없음';
+        opt.innerText = displayName;
         select.appendChild(opt);
       });
     }
@@ -1412,7 +1418,9 @@ async function handleShoppingAdSelection() {
   const ad = state.shopAds.find(a => a.nccAdId === adId);
   if (!ad) return;
 
-  const adName = ad.name || 
+  const adName = ad.referenceData?.productName || 
+                 ad.referenceData?.productTitle || 
+                 ad.name || 
                  ad.ad?.productName || 
                  ad.adattr?.productName || 
                  ad.adMsg1 || 
@@ -1433,13 +1441,20 @@ async function handleShoppingAdSelection() {
     return;
   }
 
-  // Cross-reference price from products database, default fallback to 350,000 KRW
-  const matchedProduct = state.products.find(p => 
-    p.name.includes(keyword) || keyword.includes(p.name) ||
-    p.keywords.some(k => k.includes(keyword) || keyword.includes(k))
-  );
-  
-  const price = matchedProduct ? matchedProduct.price : 350000;
+  // Pull price directly from Naver API product referenceData!
+  let price = 350000;
+  if (ad.referenceData?.lowPrice) {
+    price = parseInt(ad.referenceData.lowPrice, 10);
+  } else {
+    // Cross-reference from database.json if not present in referenceData
+    const matchedProduct = state.products.find(p => 
+      p.name.includes(keyword) || keyword.includes(p.name) ||
+      p.keywords.some(k => k.includes(keyword) || keyword.includes(k))
+    );
+    if (matchedProduct) {
+      price = matchedProduct.price;
+    }
+  }
 
   showLoader(`네이버 쇼핑에서 [${keyword}] 경쟁 업체 실시간 가격 파싱 및 순위 분석 중...`);
   
