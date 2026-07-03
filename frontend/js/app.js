@@ -1491,6 +1491,17 @@ async function handleShoppingAdSelection() {
       
       // Build a robust competitors list that always includes our own store for realistic side-by-side comparison
       const competitors = [...(result.product.competitors || [])];
+      
+      // Sanitize competitor redirect URLs to prevent blank search/catalog home pages
+      competitors.forEach(c => {
+        const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
+        if (!isOwn) {
+          if (!c.url || c.url.includes('undefined') || c.url.includes('null') || c.url === 'https://search.shopping.naver.com') {
+            c.url = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
+          }
+        }
+      });
+
       let ownMallIndex = competitors.findIndex(c => c.name.includes('부럽') || c.name.toLowerCase().includes('boolub'));
       
       if (ownMallIndex === -1) {
