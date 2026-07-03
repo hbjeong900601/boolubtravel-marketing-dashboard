@@ -49,6 +49,12 @@
           </svg>
           <span>쇼핑광고 최적화</span>
         </a>
+        <a class="nav-item" data-tab="competitive">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span>경쟁력 분석</span>
+        </a>
         <a class="nav-item" data-tab="settings">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -606,6 +612,131 @@
         </div>
       </section>
 
+      <!-- TAB 6: COMPETITIVE ANALYSIS -->
+      <section class="tab-content" id="tab-competitive">
+        
+        <!-- Scan Controls -->
+        <div class="competitive-scan-bar">
+          <div class="scan-info">
+            <span class="scan-label">마지막 스캔:</span>
+            <span id="comp-last-scan-time">아직 스캔하지 않음</span>
+          </div>
+          <button class="btn btn-primary btn-scan" id="comp-scan-all-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            전 상품 일괄 스캔
+          </button>
+        </div>
+
+        <!-- Scan Progress Bar -->
+        <div class="scan-progress-wrapper" id="comp-scan-progress-wrapper" style="display:none;">
+          <div class="scan-progress-bar">
+            <div class="scan-progress-fill" id="comp-scan-progress-fill" style="width:0%"></div>
+          </div>
+          <span class="scan-progress-text" id="comp-scan-progress-text">0 / 0 상품 스캔 중...</span>
+        </div>
+
+        <!-- Alert Banner -->
+        <div class="comp-alert-banner" id="comp-alert-banner" style="display:none;">
+          <svg xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;flex-shrink:0;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span id="comp-alert-text"></span>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid kpi-grid-4">
+          <div class="kpi-card">
+            <div class="kpi-label">최저가 상품</div>
+            <div class="kpi-value" id="comp-kpi-lowest" style="color: #00e676;">0개</div>
+            <div class="kpi-sub">자사가 시장 최저가</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">평균 가격 경쟁력</div>
+            <div class="kpi-value" id="comp-kpi-avg-ratio">-</div>
+            <div class="kpi-sub">자사가 ÷ 경쟁사 최저가</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">경쟁 우위 상품</div>
+            <div class="kpi-value" id="comp-kpi-advantage" style="color: #00e676;">0개</div>
+            <div class="kpi-sub">경쟁사 대비 5%↑ 저렴</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">가격 열위 상품</div>
+            <div class="kpi-value" id="comp-kpi-disadvantage" style="color: #ff5252;">0개</div>
+            <div class="kpi-sub">즉각 조치 필요</div>
+          </div>
+        </div>
+
+        <!-- Content Grid: Table + Chart -->
+        <div class="competitive-content-grid">
+          <!-- Main Table Area -->
+          <div class="card competitive-table-card">
+            <div class="card-header">
+              <h3 class="card-title">전 상품 경쟁력 현황</h3>
+              <div class="comp-filter-controls">
+                <select id="comp-status-filter" class="form-select">
+                  <option value="all">전체</option>
+                  <option value="lowest">🟢 최저가만</option>
+                  <option value="close">🟡 근접만</option>
+                  <option value="disadvantage">🔴 열위만</option>
+                  <option value="monopoly">⭐ 독점만</option>
+                </select>
+                <select id="comp-sort-select" class="form-select">
+                  <option value="gap-asc">가격차이 ↑ (열위 우선)</option>
+                  <option value="gap-desc">가격차이 ↓ (우위 우선)</option>
+                  <option value="competitors-desc">경쟁사 많은 순</option>
+                  <option value="name-asc">상품명순</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>상품명</th>
+                    <th>자사 판매가</th>
+                    <th>경쟁사 최저가</th>
+                    <th>가격 차이</th>
+                    <th>경쟁력 상태</th>
+                    <th>최저가 업체</th>
+                    <th>경쟁사 수</th>
+                    <th>전략</th>
+                    <th>액션</th>
+                  </tr>
+                </thead>
+                <tbody id="comp-table-tbody">
+                  <tr><td colspan="9" style="text-align:center; opacity:0.5; padding:40px;">상단의 [전 상품 일괄 스캔] 버튼을 눌러 분석을 시작하세요.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Side Panel: Chart + Strategy Summary -->
+          <div class="competitive-side-panel">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">경쟁력 분포</h3>
+              </div>
+              <div class="chart-wrapper-donut">
+                <canvas id="comp-distribution-chart"></canvas>
+              </div>
+              <div id="comp-chart-legend" class="comp-chart-legend"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">📋 종합 전략 요약</h3>
+              </div>
+              <div class="comp-strategy-summary" id="comp-strategy-summary">
+                <p style="opacity:0.5; text-align:center; padding:20px;">스캔 후 자동 생성됩니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- TAB 5: API SETTINGS -->
       <section class="tab-content" id="tab-settings">
         <div class="grid-main-layout">
@@ -737,6 +868,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=2.4"></script>
+  <script src="js/app.js?v=2.5"></script>
 </body>
 </html>

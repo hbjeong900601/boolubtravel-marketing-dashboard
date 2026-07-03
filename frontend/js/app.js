@@ -25,9 +25,11 @@ let state = {
   settings: {},
   selectedProduct: null,
   activeSimulatorKeyword: null,
+  competitiveData: [],
   charts: {
     overview: null,
-    competitor: null
+    competitor: null,
+    competitive: null
   }
 };
 
@@ -136,7 +138,25 @@ const elements = {
   shopResAdcost: document.getElementById('shop-res-adcost'),
   shopResNetprofit: document.getElementById('shop-res-netprofit'),
   shopResRoas: document.getElementById('shop-res-roas'),
-  shopSyncBidBtn: document.getElementById('shop-sync-bid-btn')
+  shopSyncBidBtn: document.getElementById('shop-sync-bid-btn'),
+
+  // Tab 6: Competitive Analysis
+  compScanAllBtn: document.getElementById('comp-scan-all-btn'),
+  compLastScanTime: document.getElementById('comp-last-scan-time'),
+  compScanProgressWrapper: document.getElementById('comp-scan-progress-wrapper'),
+  compScanProgressFill: document.getElementById('comp-scan-progress-fill'),
+  compScanProgressText: document.getElementById('comp-scan-progress-text'),
+  compAlertBanner: document.getElementById('comp-alert-banner'),
+  compAlertText: document.getElementById('comp-alert-text'),
+  compKpiLowest: document.getElementById('comp-kpi-lowest'),
+  compKpiAvgRatio: document.getElementById('comp-kpi-avg-ratio'),
+  compKpiAdvantage: document.getElementById('comp-kpi-advantage'),
+  compKpiDisadvantage: document.getElementById('comp-kpi-disadvantage'),
+  compStatusFilter: document.getElementById('comp-status-filter'),
+  compSortSelect: document.getElementById('comp-sort-select'),
+  compTableTbody: document.getElementById('comp-table-tbody'),
+  compStrategySummary: document.getElementById('comp-strategy-summary'),
+  compChartLegend: document.getElementById('comp-chart-legend')
 };
 
 // -------------------------------------------------------------
@@ -236,6 +256,10 @@ function setupEventListeners() {
       if (settingsTab) settingsTab.click();
     });
   }
+  // Competitive Analysis Tab
+  elements.compScanAllBtn.addEventListener('click', runCompetitiveScan);
+  elements.compStatusFilter.addEventListener('change', renderCompetitiveTable);
+  elements.compSortSelect.addEventListener('change', renderCompetitiveTable);
 
   // Settings Save
   elements.apiSettingsForm.addEventListener('submit', handleSaveSettings);
@@ -290,6 +314,9 @@ function switchTab(tabId) {
   } else if (tabId === 'shopping-optimizer') {
     title = '쇼핑검색 광고 최적화';
     subtitle = '네이버 쇼핑검색광고 분석 및 실시간 경쟁사 가격 대비 입찰 조정 제안';
+  } else if (tabId === 'competitive') {
+    title = '🏆 경쟁력 분석';
+    subtitle = '전 상품의 가격 경쟁 포지션 종합 조회 및 마케팅 전략 자동 추천';
   } else if (tabId === 'settings') {
     title = '네이버 API 연동 설정';
     subtitle = '네이버 검색광고 API 자격증명 관리 및 암호화 연동 서비스 설정';
@@ -306,6 +333,17 @@ function switchTab(tabId) {
       fetchCampaigns().then(populateShoppingCampaignDropdown);
     } else {
       populateShoppingCampaignDropdown();
+    }
+  } else if (tabId === 'competitive') {
+    // If data already scanned, render it
+    if (state.competitiveData.length > 0) {
+      renderCompetitiveTable();
+      renderCompetitiveKPIs();
+      drawCompetitiveChart();
+    }
+    // Ensure campaigns are loaded for scan
+    if (state.campaigns.length === 0) {
+      fetchCampaigns();
     }
   }
 }
@@ -1835,4 +1873,364 @@ function drawShoppingPriceChart(ourPrice, competitors) {
       }
     }
   });
+}
+
+// -------------------------------------------------------------
+// TAB 6: COMPETITIVE ANALYSIS
+// -------------------------------------------------------------
+
+async function runCompetitiveScan() {
+  // 1. Ensure campaigns are loaded
+  if (state.campaigns.length === 0) {
+    await fetchCampaigns();
+  }
+
+  // 2. Collect all shopping ad creatives across all campaigns and adgroups
+  const allAds = [];
+  
+  elements.compScanAllBtn.disabled = true;
+  elements.compScanProgressWrapper.style.display = 'flex';
+  elements.compScanProgressFill.style.width = '0%';
+  elements.compScanProgressText.innerText = '캠페인 및 광고 그룹 스캔 중...';
+
+  try {
+    // Iterate through campaigns to find shopping campaigns
+    for (const campaign of state.campaigns) {
+      if (campaign.campaignTp !== 'SHOPPING') continue;
+      
+      // Fetch adgroups for this campaign
+      const agRes = await fetch(`${API_BASE}/api/naver-ads/adgroups?campaignId=${campaign.nccCampaignId}`);
+      const adgroups = await agRes.json();
+      
+      for (const ag of adgroups) {
+        // Fetch ads for this adgroup
+        const adsRes = await fetch(`${API_BASE}/api/naver-ads/ads?adgroupId=${ag.nccAdgroupId}`);
+        const ads = await adsRes.json();
+        
+        for (const ad of ads) {
+          const adName = ad.adAttr?.displayProductName || ad.adName || ad.referenceData?.mallProductName || '';
+          const price = ad.referenceData?.price || ad.adAttr?.price || 0;
+          
+          if (adName && price > 0) {
+            allAds.push({
+              adId: ad.nccAdId,
+              adName,
+              price,
+              campaignName: campaign.name,
+              adgroupName: ag.name,
+              referenceData: ad.referenceData
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error collecting ads:', err);
+    elements.compScanAllBtn.disabled = false;
+    elements.compScanProgressWrapper.style.display = 'none';
+    alert('캠페인 데이터 수집 실패: ' + err.message);
+    return;
+  }
+
+  if (allAds.length === 0) {
+    elements.compScanAllBtn.disabled = false;
+    elements.compScanProgressWrapper.style.display = 'none';
+    alert('스캔할 쇼핑 광고 소재가 없습니다. 쇼핑 캠페인에 등록된 소재를 확인해 주세요.');
+    return;
+  }
+
+  // 3. Scan each ad against Naver Shopping API
+  state.competitiveData = [];
+  const total = allAds.length;
+
+  for (let i = 0; i < total; i++) {
+    const ad = allAds[i];
+    const pct = Math.round(((i + 1) / total) * 100);
+    elements.compScanProgressFill.style.width = `${pct}%`;
+    elements.compScanProgressText.innerText = `${i + 1} / ${total} 상품 스캔 중...`;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/crawler/match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: ad.adId,
+          keyword: ad.adName,
+          price: ad.price,
+          catalogId: ''
+        })
+      });
+
+      const data = await res.json();
+      const competitors = (data.product?.competitors || []).filter(c => {
+        const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
+        return !isOwn && c.price > 0;
+      });
+
+      const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
+      const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
+      const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
+      const status = getCompetitiveStatus(ad.price, minCompPrice, competitors.length);
+
+      state.competitiveData.push({
+        adId: ad.adId,
+        adName: ad.adName,
+        price: ad.price,
+        minCompPrice,
+        minCompName,
+        gap,
+        status,
+        competitorCount: competitors.length,
+        source: data.source || 'unknown',
+        campaignName: ad.campaignName,
+        adgroupName: ad.adgroupName
+      });
+    } catch (err) {
+      console.warn(`Scan failed for ${ad.adName}:`, err.message);
+    }
+
+    // Small delay between requests to avoid throttling
+    if (i < total - 1) {
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  // 4. Finalize
+  elements.compScanProgressWrapper.style.display = 'none';
+  elements.compScanAllBtn.disabled = false;
+
+  const now = new Date();
+  elements.compLastScanTime.innerText = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+  // Show alert if any price disadvantages detected
+  const disadvantaged = state.competitiveData.filter(d => d.status === 'disadvantage');
+  if (disadvantaged.length > 0) {
+    elements.compAlertBanner.style.display = 'flex';
+    elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다. 가격 조정 또는 입찰 전략 검토가 필요합니다.`;
+  } else {
+    elements.compAlertBanner.style.display = 'none';
+  }
+
+  renderCompetitiveTable();
+  renderCompetitiveKPIs();
+  drawCompetitiveChart();
+  renderStrategySummary();
+}
+
+function getCompetitiveStatus(ourPrice, minCompPrice, competitorCount) {
+  if (competitorCount === 0 || minCompPrice === null) return 'monopoly';
+  const ratio = ourPrice / minCompPrice;
+  if (ratio <= 1.0) return 'lowest';
+  if (ratio <= 1.05) return 'close';
+  return 'disadvantage';
+}
+
+function getCompetitiveStrategy(status) {
+  switch (status) {
+    case 'lowest':
+      return { emoji: '🟢', label: '공격적 입찰', desc: 'CPC를 올려 상위 노출을 확대하세요' };
+    case 'close':
+      return { emoji: '🟡', label: '현 입찰 유지', desc: '리뷰·배송 등 부가가치 차별화' };
+    case 'disadvantage':
+      return { emoji: '🔴', label: '입찰 하향 검토', desc: '가격 조정이나 프로모션 검토' };
+    case 'monopoly':
+      return { emoji: '⭐', label: '최소 입찰 운영', desc: '독점 키워드, 효율적 운영 가능' };
+    default:
+      return { emoji: '❓', label: '-', desc: '' };
+  }
+}
+
+function renderCompetitiveTable() {
+  const filter = elements.compStatusFilter.value;
+  const sort = elements.compSortSelect.value;
+
+  let data = [...state.competitiveData];
+
+  // Apply filter
+  if (filter !== 'all') {
+    data = data.filter(d => d.status === filter);
+  }
+
+  // Apply sort
+  switch (sort) {
+    case 'gap-asc':
+      data.sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity)); // biggest positive gap first (worst)
+      break;
+    case 'gap-desc':
+      data.sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)); // smallest/negative gap first (best)
+      break;
+    case 'competitors-desc':
+      data.sort((a, b) => b.competitorCount - a.competitorCount);
+      break;
+    case 'name-asc':
+      data.sort((a, b) => a.adName.localeCompare(b.adName));
+      break;
+  }
+
+  if (data.length === 0) {
+    elements.compTableTbody.innerHTML = `<tr><td colspan="9" style="text-align:center; opacity:0.5; padding:40px;">필터 조건에 맞는 상품이 없습니다.</td></tr>`;
+    return;
+  }
+
+  elements.compTableTbody.innerHTML = data.map(item => {
+    const strategy = getCompetitiveStrategy(item.status);
+    
+    // Status badge
+    let badgeClass = 'comp-badge-' + item.status;
+    let badgeLabel = '';
+    if (item.status === 'lowest') badgeLabel = '🟢 최저가';
+    else if (item.status === 'close') badgeLabel = '🟡 근접';
+    else if (item.status === 'disadvantage') badgeLabel = '🔴 열위';
+    else if (item.status === 'monopoly') badgeLabel = '⭐ 독점';
+
+    // Gap display
+    let gapHtml = '';
+    if (item.gap === null) {
+      gapHtml = `<span class="gap-zero">-</span>`;
+    } else if (item.gap > 0) {
+      gapHtml = `<span class="gap-positive">+₩${item.gap.toLocaleString()}</span>`;
+    } else if (item.gap < 0) {
+      gapHtml = `<span class="gap-negative">-₩${Math.abs(item.gap).toLocaleString()}</span>`;
+    } else {
+      gapHtml = `<span class="gap-zero">₩0</span>`;
+    }
+
+    return `<tr>
+      <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.adName}">${item.adName}</td>
+      <td>₩${item.price.toLocaleString()}</td>
+      <td>${item.minCompPrice !== null ? '₩' + item.minCompPrice.toLocaleString() : '-'}</td>
+      <td>${gapHtml}</td>
+      <td><span class="comp-badge ${badgeClass}">${badgeLabel}</span></td>
+      <td>${item.minCompName}</td>
+      <td>${item.competitorCount}개</td>
+      <td><span class="comp-strategy-mini">${strategy.emoji} ${strategy.label}</span></td>
+      <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.adId}')">상세 분석</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function navigateToShoppingAd(adId) {
+  // Navigate to shopping optimizer tab - user can then drill down
+  const shopTab = document.querySelector('[data-tab="shopping-optimizer"]');
+  if (shopTab) shopTab.click();
+}
+
+function renderCompetitiveKPIs() {
+  const data = state.competitiveData;
+  if (data.length === 0) return;
+
+  const lowestCount = data.filter(d => d.status === 'lowest').length;
+  const advantageCount = data.filter(d => d.status === 'lowest' || (d.gap !== null && d.gap < -(d.price * 0.05))).length;
+  const disadvantageCount = data.filter(d => d.status === 'disadvantage').length;
+
+  // Average ratio
+  const withComp = data.filter(d => d.minCompPrice !== null && d.minCompPrice > 0);
+  const avgRatio = withComp.length > 0
+    ? withComp.reduce((sum, d) => sum + (d.price / d.minCompPrice), 0) / withComp.length
+    : null;
+
+  elements.compKpiLowest.innerText = `${lowestCount}개`;
+  elements.compKpiAdvantage.innerText = `${advantageCount}개`;
+  elements.compKpiDisadvantage.innerText = `${disadvantageCount}개`;
+
+  if (avgRatio !== null) {
+    const pct = (avgRatio * 100).toFixed(1);
+    elements.compKpiAvgRatio.innerText = `${pct}%`;
+    elements.compKpiAvgRatio.style.color = avgRatio <= 1.0 ? '#00e676' : avgRatio <= 1.05 ? '#ffc107' : '#ff5252';
+  } else {
+    elements.compKpiAvgRatio.innerText = '-';
+  }
+}
+
+function drawCompetitiveChart() {
+  const data = state.competitiveData;
+  if (data.length === 0) return;
+
+  const counts = {
+    lowest: data.filter(d => d.status === 'lowest').length,
+    close: data.filter(d => d.status === 'close').length,
+    disadvantage: data.filter(d => d.status === 'disadvantage').length,
+    monopoly: data.filter(d => d.status === 'monopoly').length
+  };
+
+  const ctx = document.getElementById('comp-distribution-chart').getContext('2d');
+
+  if (state.charts.competitive) {
+    state.charts.competitive.destroy();
+  }
+
+  const colors = ['#00e676', '#ffc107', '#ff5252', '#a78bfa'];
+  const labels = ['최저가', '근접', '열위', '독점'];
+  const values = [counts.lowest, counts.close, counts.disadvantage, counts.monopoly];
+
+  state.charts.competitive = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderWidth: 0,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+              return `${context.label}: ${context.raw}개 (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Render custom legend
+  elements.compChartLegend.innerHTML = labels.map((label, i) => `
+    <div class="comp-legend-item">
+      <span class="comp-legend-dot" style="background:${colors[i]}"></span>
+      <span>${label} ${values[i]}개</span>
+    </div>
+  `).join('');
+}
+
+function renderStrategySummary() {
+  const data = state.competitiveData;
+  if (data.length === 0) return;
+
+  const lowestCount = data.filter(d => d.status === 'lowest').length;
+  const closeCount = data.filter(d => d.status === 'close').length;
+  const disadvantageCount = data.filter(d => d.status === 'disadvantage').length;
+  const monopolyCount = data.filter(d => d.status === 'monopoly').length;
+
+  const items = [];
+
+  if (lowestCount > 0) {
+    items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lowestCount}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있으므로 전환율이 높습니다.</div></div>`);
+  }
+  if (closeCount > 0) {
+    items.push(`<div class="comp-strategy-item"><span class="emoji">🟡</span><div><strong>근접 ${closeCount}개 상품</strong> — 현 입찰가를 유지하되, 리뷰 수·배송 속도·부가 서비스 등 비가격 차별화 포인트를 강조하세요.</div></div>`);
+  }
+  if (disadvantageCount > 0) {
+    const topDisadv = data.filter(d => d.status === 'disadvantage').sort((a, b) => b.gap - a.gap).slice(0, 3);
+    const topNames = topDisadv.map(d => `"${d.adName.substring(0, 20)}..." (+₩${d.gap.toLocaleString()})`).join(', ');
+    items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${disadvantageCount}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나, 가격 인하 프로모션을 검토하세요. 주요 열위 상품: ${topNames}</div></div>`);
+  }
+  if (monopolyCount > 0) {
+    items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${monopolyCount}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가로 효율적 운영이 가능합니다.</div></div>`);
+  }
+
+  if (items.length === 0) {
+    items.push(`<p style="opacity:0.5; text-align:center; padding:20px;">분석 결과가 없습니다.</p>`);
+  }
+
+  elements.compStrategySummary.innerHTML = items.join('');
 }
