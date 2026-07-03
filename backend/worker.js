@@ -309,7 +309,8 @@ async function runCrawler(keyword, price, catalogId, openClientId, openClientSec
         headers: {
           'X-Naver-Client-Id': openClientId,
           'X-Naver-Client-Secret': openClientSecret,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       });
 
