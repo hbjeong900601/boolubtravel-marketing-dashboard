@@ -671,9 +671,25 @@
               </div>
             </div>
             <div class="table-responsive">
+              <!-- Bulk Action Bar for Competitive Table -->
+              <div class="bid-bulk-bar" id="comp-bulk-bar" style="display: none; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; font-size: 13px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="comp-select-all" style="cursor:pointer; width:15px; height:15px;">
+                  <span id="comp-select-count" style="font-weight:600; color:var(--color-secondary);">0개 선택됨</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <span style="color:rgba(255,255,255,0.6);">선택 소재 CPC 일괄 조정:</span>
+                  <button class="btn btn-secondary btn-sm" onclick="adjustSelectedCompCpc(-50)">-50원</button>
+                  <button class="btn btn-secondary btn-sm" onclick="adjustSelectedCompCpc(50)">+50원</button>
+                  <input type="number" class="input-control" id="comp-bulk-cpc-input" placeholder="직접 입력" style="width:90px; text-align:right; font-size:12px; height:28px; padding:0 8px;">
+                  <button class="btn btn-naver btn-sm" style="height:28px;" onclick="applyBulkCompCpc()">일괄 적용</button>
+                  <button class="btn btn-primary btn-sm" style="height:28px; background-color:#4f46e5; border-color:#4f46e5;" onclick="saveBulkCompCpcToServer()">일괄 네이버 전송</button>
+                </div>
+              </div>
               <table>
                 <thead>
                   <tr>
+                    <th style="width:40px; text-align:center;">선택</th>
                     <th>상품명</th>
                     <th>자사 판매가</th>
                     <th>경쟁사 최저가</th>
@@ -682,12 +698,13 @@
                     <th>경쟁력 상태</th>
                     <th>최저가 업체</th>
                     <th>경쟁사 수</th>
+                    <th>CPC 입찰가</th>
                     <th>전략</th>
                     <th>액션</th>
                   </tr>
                 </thead>
                 <tbody id="comp-table-tbody">
-                  <tr><td colspan="10" style="text-align:center; opacity:0.5; padding:40px;">데이터를 불러오는 중... 잠시만 기다려주세요.</td></tr>
+                  <tr><td colspan="12" style="text-align:center; opacity:0.5; padding:40px;">데이터를 불러오는 중... 잠시만 기다려주세요.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -848,6 +865,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=3.5"></script>
+  <script src="js/app.js?v=3.6"></script>
 </body>
 </html>

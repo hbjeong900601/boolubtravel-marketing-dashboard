@@ -183,7 +183,11 @@ const elements = {
   compSortSelect: document.getElementById('comp-sort-select'),
   compTableTbody: document.getElementById('comp-table-tbody'),
   compStrategySummary: document.getElementById('comp-strategy-summary'),
-  compChartLegend: document.getElementById('comp-chart-legend')
+  compChartLegend: document.getElementById('comp-chart-legend'),
+  compBulkBar: document.getElementById('comp-bulk-bar'),
+  compSelectAll: document.getElementById('comp-select-all'),
+  compSelectCount: document.getElementById('comp-select-count'),
+  compBulkCpcInput: document.getElementById('comp-bulk-cpc-input')
 };
 
 // -------------------------------------------------------------
@@ -296,6 +300,7 @@ function setupEventListeners() {
   elements.compStatusFilter.addEventListener('change', renderCompetitiveTable);
   elements.compSortSelect.addEventListener('change', renderCompetitiveTable);
   elements.compExportCsvBtn.addEventListener('click', exportCompetitiveCSV);
+  elements.compSelectAll.addEventListener('change', handleCompSelectAllToggle);
 
   // Settings Save
   elements.apiSettingsForm.addEventListener('submit', handleSaveSettings);
@@ -2398,14 +2403,30 @@ function renderCompetitiveTable() {
     case 'name-asc': data.sort((a, b) => a.adName.localeCompare(b.adName)); break;
   }
 
-  if (data.length === 0) { elements.compTableTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; opacity:0.5; padding:40px;">필터 조건에 맞는 상품이 없습니다.</td></tr>`; return; }
+  // Show/hide bulk bar
+  if (data.length > 0) {
+    elements.compBulkBar.style.display = 'flex';
+    elements.compSelectAll.checked = false;
+    updateCompSelectedCount();
+  } else {
+    elements.compBulkBar.style.display = 'none';
+  }
 
-  elements.compTableTbody.innerHTML = data.map(item => {
+  if (data.length === 0) { elements.compTableTbody.innerHTML = `<tr><td colspan="12" style="text-align:center; opacity:0.5; padding:40px;">필터 조건에 맞는 상품이 없습니다.</td></tr>`; return; }
+
+  elements.compTableTbody.innerHTML = data.map((item, idx) => {
     const strategy = getCompetitiveStrategy(item.status);
     const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
     let gapHtml = item.gap === null ? '<span class="gap-zero">-</span>' : item.gap > 0 ? `<span class="gap-positive">+₩${item.gap.toLocaleString()}</span>` : item.gap < 0 ? `<span class="gap-negative">-₩${Math.abs(item.gap).toLocaleString()}</span>` : '<span class="gap-zero">₩0</span>';
+    
+    // Default CPC value (use stored value if available, otherwise 0)
+    const cpcVal = item.currentCpc || 0;
+
     return `<tr>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.adName}">${item.adName}</td>
+      <td style="text-align:center;">
+        <input type="checkbox" class="comp-kw-checkbox" data-idx="${idx}" data-adgroup-id="${item.adgroupId}" onchange="updateCompSelectedCount()" style="cursor:pointer; width:15px; height:15px;">
+      </td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.adName}">${item.adName}</td>
       <td>₩${item.price.toLocaleString()}</td>
       <td>${item.minCompPrice !== null ? '₩' + item.minCompPrice.toLocaleString() : '-'}</td>
       <td>${gapHtml}</td>
@@ -2413,11 +2434,125 @@ function renderCompetitiveTable() {
       <td><span class="comp-badge comp-badge-${item.status}">${badgeLabels[item.status] || '-'}</span></td>
       <td>${item.minCompName}</td>
       <td>${item.competitorCount}개</td>
+      <td>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <input type="number" class="input-control comp-cpc-input" value="${cpcVal}" step="50" min="70"
+            data-adgroup-id="${item.adgroupId}" id="comp-cpc-${item.adgroupId}"
+            style="width:80px; text-align:right; font-size:12px; height:28px; padding:0 6px;">
+          <button class="btn btn-naver btn-sm" style="padding:2px 6px; font-size:11px; height:26px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adgroupId}')">전송</button>
+        </div>
+      </td>
       <td><span class="comp-strategy-mini">${strategy.emoji} ${strategy.label}</span></td>
       <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.campaignId}','${item.adgroupId}','${item.adId}')">상세 분석</button></td>
     </tr>`;
   }).join('');
 }
+
+// --- Competitive Table Bulk Management Functions ---
+
+window.handleCompSelectAllToggle = function() {
+  const isChecked = elements.compSelectAll.checked;
+  document.querySelectorAll('.comp-kw-checkbox').forEach(cb => { cb.checked = isChecked; });
+  updateCompSelectedCount();
+};
+
+window.updateCompSelectedCount = function() {
+  const checked = document.querySelectorAll('.comp-kw-checkbox:checked').length;
+  elements.compSelectCount.innerText = `${checked}개 선택됨`;
+};
+
+window.adjustSelectedCompCpc = function(amount) {
+  const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
+  if (checkedBoxes.length === 0) { alert('조정할 소재를 선택해 주세요.'); return; }
+  checkedBoxes.forEach(cb => {
+    const agId = cb.getAttribute('data-adgroup-id');
+    const input = document.getElementById(`comp-cpc-${agId}`);
+    if (input) {
+      let val = parseInt(input.value, 10) || 70;
+      val = Math.max(70, val + amount);
+      input.value = val;
+    }
+  });
+};
+
+window.applyBulkCompCpc = function() {
+  const bulkVal = parseInt(elements.compBulkCpcInput.value, 10);
+  if (!bulkVal || bulkVal < 70) { alert('70원 이상의 올바른 입찰가를 입력해 주세요.'); return; }
+  const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
+  if (checkedBoxes.length === 0) { alert('적용할 소재를 선택해 주세요.'); return; }
+  checkedBoxes.forEach(cb => {
+    const agId = cb.getAttribute('data-adgroup-id');
+    const input = document.getElementById(`comp-cpc-${agId}`);
+    if (input) input.value = bulkVal;
+  });
+};
+
+window.saveCompCpcToServer = async function(adgroupId) {
+  const input = document.getElementById(`comp-cpc-${adgroupId}`);
+  if (!input) return;
+  const bidAmt = parseInt(input.value, 10);
+  if (!bidAmt || bidAmt < 70) { alert('70원 이상의 입찰가를 입력해 주세요.'); return; }
+
+  showLoader('네이버 광고 서버에 CPC 입찰가 전송 중...');
+  try {
+    const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adgroupId, bidAmt })
+    });
+    const result = await res.json();
+    hideLoader();
+    if (result.nccAdgroupId || result.result) {
+      // Update stored CPC in competitiveData
+      state.competitiveData.forEach(item => { if (item.adgroupId === adgroupId) item.currentCpc = bidAmt; });
+      alert(`CPC ₩${bidAmt.toLocaleString()} 입찰가가 네이버에 동기화되었습니다!`);
+    } else {
+      alert('입찰가 전송 실패: ' + JSON.stringify(result));
+    }
+  } catch (err) {
+    hideLoader();
+    alert('연동 실패: ' + err.message);
+  }
+};
+
+window.saveBulkCompCpcToServer = async function() {
+  const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
+  if (checkedBoxes.length === 0) { alert('네이버에 전송할 소재를 선택해 주세요.'); return; }
+
+  // Collect unique adgroupId -> bidAmt pairs
+  const updates = new Map();
+  checkedBoxes.forEach(cb => {
+    const agId = cb.getAttribute('data-adgroup-id');
+    const input = document.getElementById(`comp-cpc-${agId}`);
+    if (input && !updates.has(agId)) {
+      updates.set(agId, parseInt(input.value, 10));
+    }
+  });
+
+  showLoader(`총 ${updates.size}개 광고그룹 CPC 일괄 네이버 전송 중...`);
+  let successCount = 0;
+  for (const [agId, bidAmt] of updates) {
+    try {
+      const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adgroupId: agId, bidAmt })
+      });
+      const result = await res.json();
+      if (result.nccAdgroupId || result.result) {
+        successCount++;
+        state.competitiveData.forEach(item => { if (item.adgroupId === agId) item.currentCpc = bidAmt; });
+      }
+    } catch (e) {
+      console.warn(`Bulk CPC update failed for ${agId}:`, e);
+    }
+  }
+
+  hideLoader();
+  elements.compSelectAll.checked = false;
+  updateCompSelectedCount();
+  alert(`일괄 CPC 전송 완료! (성공: ${successCount} / ${updates.size}개 광고그룹)`);
+};
 
 async function navigateToShoppingAd(campaignId, adgroupId, adId) {
   const shopTab = document.querySelector('[data-tab="shopping-optimizer"]');
