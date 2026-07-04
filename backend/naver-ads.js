@@ -137,48 +137,12 @@ class NaverAdsAPI {
   }
 
   /**
-   * Update Ad Status (ACTIVE or PAUSED)
-   */
-  async updateAdStatus(adId, enabled) {
-    const path = `/ncc/ads/${adId}`;
-    return this.request('PUT', path, { fields: 'userLock' }, { userLock: !enabled });
-  }
-
-  /**
-   * Update Keyword Status (ACTIVE or PAUSED)
-   */
-  async updateKeywordStatus(keywordId, enabled) {
-    const path = `/ncc/keywords/${keywordId}`;
-    return this.request('PUT', path, { fields: 'userLock' }, { userLock: !enabled });
-  }
-
-  /**
    * Get Keyword Tool Info (search volume, clicks, CTR)
    * Hint keywords is a comma separated string (max 5 keywords)
    */
   async getKeywordInfo(keywordsArray) {
     const hintKeywords = keywordsArray.join(',');
     return this.request('GET', '/keywordstool', { hintKeywords, showDetail: '1' });
-  }
-
-  /**
-   * Get Stats for a list of IDs (campaigns, adgroups, or keywords)
-   */
-  async getStats(idsArray, fields = 'impCnt,clkCnt,salesAmt,ctr,cpc,ccnt,crto,convAmt,ror,avgRnk', timeRange = null) {
-    if (!timeRange) {
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const yyyy = yesterday.getFullYear();
-      const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
-      const dd = String(yesterday.getDate()).padStart(2, '0');
-      const dateStr = `${yyyy}-${mm}-${dd}`;
-      timeRange = { startDate: dateStr, endDate: dateStr };
-    }
-    
-    return this.request('GET', '/stat', {
-      ids: idsArray.join(','),
-      fields: fields,
-      timeRange: JSON.stringify(timeRange)
-    });
   }
 
   /**
@@ -349,25 +313,15 @@ class NaverAdsAPI {
       return [];
     }
 
-    // 5. Adjust Bid & Status
+    // 5. Adjust Bid
     if (path.startsWith('/ncc/keywords/')) {
       const keywordId = path.split('/').pop();
-      if (data && data.userLock !== undefined) {
-        console.log(`[SIMULATION] Keyword ${keywordId} userLock updated to ${data.userLock}`);
-        return { nccKeywordId: keywordId, userLock: data.userLock, result: 'SUCCESS_SIMULATED' };
-      }
       console.log(`[SIMULATION] Keyword ${keywordId} bid updated to ${data.bidAmt} KRW`);
       return {
         nccKeywordId: keywordId,
         bidAmt: data.bidAmt,
         result: 'SUCCESS_SIMULATED'
       };
-    }
-
-    if (path.startsWith('/ncc/ads/')) {
-      const adId = path.split('/').pop();
-      console.log(`[SIMULATION] Ad ${adId} userLock updated to ${data.userLock}`);
-      return { nccAdId: adId, userLock: data.userLock, result: 'SUCCESS_SIMULATED' };
     }
 
     if (path.startsWith('/ncc/adgroups/')) {
@@ -378,39 +332,6 @@ class NaverAdsAPI {
         bidAmt: data.bidAmt,
         result: 'SUCCESS_SIMULATED'
       };
-    }
-
-    // 6. Stats (/stat)
-    if (path === '/stat') {
-      const ids = (queryParams.ids || '').split(',');
-      const dataList = ids.map(id => {
-        const charSum = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const impCnt = 10000 + (charSum % 25000);
-        const clkCnt = Math.round(impCnt * (0.015 + (charSum % 100) / 10000));
-        const salesAmt = Math.round(clkCnt * (600 + (charSum % 1200)));
-        const ctr = parseFloat(((clkCnt / impCnt) * 100).toFixed(4));
-        const cpc = clkCnt > 0 ? Math.round(salesAmt / clkCnt) : 0;
-        const ccnt = Math.round(clkCnt * (0.02 + (charSum % 5) * 0.01));
-        const crto = clkCnt > 0 ? parseFloat(((ccnt / clkCnt) * 100).toFixed(4)) : 0;
-        const convAmt = ccnt * (45000 + (charSum % 150000));
-        const ror = salesAmt > 0 ? parseFloat(((convAmt / salesAmt) * 100).toFixed(2)) : 0;
-        const avgRnk = parseFloat((1.5 + (charSum % 35) / 10).toFixed(1));
-
-        return {
-          id: id,
-          impCnt,
-          clkCnt,
-          salesAmt,
-          ctr,
-          cpc,
-          ccnt,
-          crto,
-          convAmt,
-          ror,
-          avgRnk
-        };
-      });
-      return { data: dataList };
     }
 
     return {};

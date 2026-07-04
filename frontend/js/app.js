@@ -4,16 +4,35 @@
  */
 
 // Dynamically resolve backend API URL
+const WORKERS_FALLBACK = 'https://boolubtravel-marketing-backend.je3899.workers.dev';
 let API_BASE = localStorage.getItem('boolub_backend_url') || 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
-    : 'https://boolubtravel-marketing-backend.je3899.workers.dev');
+    : WORKERS_FALLBACK);
 
 if (API_BASE && API_BASE.endsWith('/')) {
   API_BASE = API_BASE.slice(0, -1);
 }
 if (API_BASE && !/^https?:\/\//i.test(API_BASE) && API_BASE !== 'http://localhost:3000' && API_BASE !== window.location.origin) {
   API_BASE = 'https://' + API_BASE;
+}
+
+// Resilient fetch: auto-fallback to Workers backend when primary API_BASE is unreachable
+async function resilientFetch(path, options) {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, options);
+    return res;
+  } catch (primaryErr) {
+    // If API_BASE is already the Workers fallback, don't retry
+    if (API_BASE === WORKERS_FALLBACK) throw primaryErr;
+    console.warn(`Primary API (${API_BASE}) failed, falling back to Workers backend...`, primaryErr.message);
+    try {
+      const fallbackRes = await fetch(`${WORKERS_FALLBACK}${path}`, options);
+      return fallbackRes;
+    } catch (fallbackErr) {
+      throw primaryErr; // throw the original error if fallback also fails
+    }
+  }
 }
 
 // State management
@@ -32,24 +51,6 @@ let state = {
     competitive: null
   }
 };
-
-// Global fetch error handler specifically designed to identify and guide mixed content HTTPS/HTTP blocks
-function handleFetchError(err) {
-  hideLoader();
-  const isHttps = window.location.protocol === 'https:';
-  const isHttpBackend = API_BASE.startsWith('http://');
-  
-  if (isHttps && isHttpBackend && (err.message.includes('Failed to fetch') || err.name === 'TypeError')) {
-    alert(`⚠️ [CORS / 보안 차단 안내]
-현재 보안 연결(HTTPS) 웹 페이지에서 로컬 서버(HTTP)로 API 요청을 보내어 브라우저 보안 규정(Mixed Content)에 의해 접속이 차단되었습니다.
-
-[해결 방법]
-1. 웹 브라우저 주소창에 로컬 주소인 'http://localhost:3000'을 직접 입력하여 접속해 주세요.
-2. 또는 제공해 드린 Cloudflare Tunnel HTTPS 주소로 접속하시면 차단 없이 완벽하게 연동됩니다.`);
-  } else {
-    alert('에러: ' + err.message);
-  }
-}
 
 // DOM Elements
 const elements = {
@@ -71,7 +72,6 @@ const elements = {
   overviewCampaignTableBody: document.getElementById('overview-campaign-table-body'),
   overviewInsights: document.getElementById('overview-insights'),
   overviewRefreshTableBtn: document.getElementById('overview-refresh-table-btn'),
-  overviewStockTableBody: document.getElementById('overview-stock-table-body'),
 
   // Tab 2: Compare
   compareProductTableBody: document.getElementById('compare-product-table-body'),
@@ -211,7 +211,6 @@ async function initApp() {
   renderOverviewInsights();
   renderCampaignsTable();
   renderProductsTable();
-  renderStockTable();
   updateOverviewKPIs();
   
   hideLoader();
@@ -393,7 +392,6 @@ async function runGlobalSync() {
     renderCampaignsTable();
     renderProductsTable();
     renderOverviewInsights();
-    renderStockTable();
     updateOverviewKPIs();
     
     if (state.selectedProduct) {
@@ -430,7 +428,7 @@ async function fetchSettings() {
       naverOpenClientSecret: localStorage.getItem('boolub_open_client_secret') || ''
     };
 
-    const res = await fetch(`${API_BASE}/api/naver-ads/settings`);
+    const res = await resilientFetch(`/api/naver-ads/settings`);
     state.settings = await res.json();
 
     // If live server settings got wiped out due to memory recycle, restore from local storage
@@ -442,7 +440,7 @@ async function fetchSettings() {
       };
       
       // Auto-sync back to server in background
-      fetch(`${API_BASE}/api/naver-ads/settings`, {
+      resilientFetch(`/api/naver-ads/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(localSettings)
@@ -473,7 +471,7 @@ async function fetchSettings() {
 
 async function fetchProducts() {
   try {
-    const res = await fetch(`${API_BASE}/api/products`);
+    const res = await resilientFetch(`/api/products`);
     state.products = await res.json();
   } catch (err) {
     console.error('Failed to fetch products:', err);
@@ -482,7 +480,7 @@ async function fetchProducts() {
 
 async function fetchCampaigns() {
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/campaigns`);
+    const res = await resilientFetch(`/api/naver-ads/campaigns`);
     state.campaigns = await res.json();
     populateCampaignDropdown();
   } catch (err) {
@@ -507,36 +505,19 @@ function updateConnectionStatusUI() {
 // TAB 1: OVERVIEW RENDERING
 // -------------------------------------------------------------
 
-async function fetchOverviewStats() {
-  const isRealConnection = state.settings && state.settings.isConnected;
-  if (!isRealConnection || !state.campaigns || state.campaigns.length === 0) {
-    return null;
-  }
-  
-  const activeIds = state.campaigns
-    .filter(c => (c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false))
-    .map(c => c.nccCampaignId);
-    
-  if (activeIds.length === 0) return null;
-  
-  try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/stats?ids=${activeIds.join(',')}`);
-    const statsData = await res.json();
-    return statsData.data || [];
-  } catch (err) {
-    console.warn('Failed to fetch campaign stats:', err);
-    return null;
-  }
-}
-
-async function updateOverviewKPIs() {
+function updateOverviewKPIs() {
   const isRealConnection = state.settings && state.settings.isConnected;
   
   let activeDailyBudgetSum = 0;
+  let totalChargeCostSum = 0;
+  let expectCostSum = 0;
+  
   state.campaigns.forEach(c => {
     const isActive = c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false;
     if (isActive) {
       activeDailyBudgetSum += (c.dailyBudget !== undefined ? c.dailyBudget : (c.userLimitAmt || 0));
+      totalChargeCostSum += (c.totalChargeCost || 0);
+      expectCostSum += (c.expectCost || 0);
     }
   });
 
@@ -546,50 +527,51 @@ async function updateOverviewKPIs() {
     totalMonthlyBudget = 1000000; // Default Mock
   }
 
-  // Fetch real statistics
-  const statsList = await fetchOverviewStats();
-  
-  let totalImp = 0;
-  let totalClicks = 0;
-  let totalSpent = 0;
-  let totalConversions = 0;
-  let totalConvAmt = 0;
-
-  if (statsList && statsList.length > 0) {
-    statsList.forEach(s => {
-      totalImp += s.impCnt || 0;
-      totalClicks += s.clkCnt || 0;
-      totalSpent += s.salesAmt || 0;
-      totalConversions += s.ccnt || 0;
-      totalConvAmt += s.convAmt || 0;
-    });
+  // Calculate Spent
+  let spentAmt = totalChargeCostSum;
+  if (!isRealConnection || spentAmt === 0) {
+    spentAmt = 462800; // Default Mock
+  } else {
+    // If it's real, scale realistically based on daily budget if charge costs are zero
+    if (spentAmt < 1000) {
+      spentAmt = Math.round(activeDailyBudgetSum * 0.463) || 462800;
+    }
   }
 
-  // Fallbacks if stats are empty or simulation mode
-  if (totalSpent === 0) {
-    totalSpent = Math.round(activeDailyBudgetSum * 0.463) || 462800;
+  // Calculate Clicks
+  let clicksCount = Math.round(spentAmt / 1200);
+  if (!isRealConnection || clicksCount === 0) {
+    clicksCount = 382; // Default Mock
   }
-  if (totalClicks === 0) {
-    totalClicks = Math.round(totalSpent / 1200) || 382;
+
+  // Clicks subtext CTR
+  let ctrVal = 1.84;
+  if (isRealConnection) {
+    ctrVal = (1.5 + (state.campaigns.length % 10) * 0.1).toFixed(2);
   }
-  
-  const ctrVal = totalImp > 0 ? ((totalClicks / totalImp) * 100).toFixed(2) : (1.5 + (state.campaigns.length % 10) * 0.1).toFixed(2);
-  const roasVal = totalSpent > 0 ? Math.round((totalConvAmt / totalSpent) * 100) : (280 + (state.campaigns.filter(c => (c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false)).length * 15));
+
+  // Calculate ROAS
+  let roasVal = 342;
+  if (isRealConnection) {
+    const activeCount = state.campaigns.filter(c => (c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false)).length;
+    roasVal = 280 + (activeCount * 15);
+    if (roasVal > 450) roasVal = 450;
+  }
 
   // Update DOM Elements
   if (elements.kpiTotalBudget) {
     elements.kpiTotalBudget.innerText = `₩${totalMonthlyBudget.toLocaleString()}`;
   }
   if (elements.kpiSpent) {
-    elements.kpiSpent.innerText = `₩${totalSpent.toLocaleString()}`;
+    elements.kpiSpent.innerText = `₩${spentAmt.toLocaleString()}`;
   }
   const spentPercentEl = document.getElementById('kpi-spent-percent');
   if (spentPercentEl) {
-    const spentPercent = ((totalSpent / totalMonthlyBudget) * 100).toFixed(1);
+    const spentPercent = ((spentAmt / totalMonthlyBudget) * 100).toFixed(1);
     spentPercentEl.innerText = `${spentPercent}%`;
   }
   if (elements.kpiClicks) {
-    elements.kpiClicks.innerText = `${totalClicks.toLocaleString()} Clicks`;
+    elements.kpiClicks.innerText = `${clicksCount.toLocaleString()} Clicks`;
   }
   const ctrEl = document.querySelector('.kpi-card.naver .kpi-sub span');
   if (ctrEl) {
@@ -600,7 +582,7 @@ async function updateOverviewKPIs() {
   }
 
   // Render Chart
-  updateOverviewChart(isRealConnection, activeDailyBudgetSum, totalSpent, totalClicks);
+  updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount);
 }
 
 function updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount) {
@@ -781,63 +763,6 @@ window.toggleCampaignActive = function(campaignId, active) {
   }
 };
 
-function renderStockTable() {
-  const tbody = elements.overviewStockTableBody;
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (state.products.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">등록된 여행 상품이 없습니다.</td></tr>`;
-    return;
-  }
-
-  state.products.forEach(p => {
-    const tr = document.createElement('tr');
-    const isOut = p.stockStatus === 'OUT_OF_STOCK';
-    const statusText = isOut ? '🔴 품절 (광고 차단됨)' : '🟢 판매중 (정상 광고)';
-    const statusClass = isOut ? 'badge-danger' : 'badge-success';
-
-    tr.innerHTML = `
-      <td style="color:var(--text-muted); font-size:12px;">${p.id}</td>
-      <td style="font-weight:600; color:white;">${p.name}</td>
-      <td>₩${p.price.toLocaleString()}</td>
-      <td><span class="badge ${statusClass}">${statusText}</span></td>
-      <td>
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-secondary btn-sm" style="padding:4px 8px; font-size:11px;" onclick="toggleProductStock('${p.id}', 'IN_STOCK')" ${!isOut ? 'disabled' : ''}>판매중 처리</button>
-          <button class="btn btn-danger btn-sm" style="padding:4px 8px; font-size:11px; background:#ff5252; border-color:#ff5252;" onclick="toggleProductStock('${p.id}', 'OUT_OF_STOCK')" ${isOut ? 'disabled' : ''}>품절 처리</button>
-        </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-window.toggleProductStock = async function(productId, stockStatus) {
-  showLoader('자사 상품 재고 연동 및 네이버 광고 가드 처리 중...');
-  try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/toggle-product-stock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId, stockStatus })
-    });
-    const data = await res.json();
-    hideLoader();
-
-    if (data.product) {
-      const p = state.products.find(x => x.id === productId);
-      if (p) p.stockStatus = stockStatus;
-      renderStockTable();
-      alert(`성공적으로 상품 상태를 [${stockStatus === 'OUT_OF_STOCK' ? '품절' : '판매중'}]으로 동기화했습니다! 관련 광고 스캔 및 가드가 즉시 실행되었습니다.`);
-    } else {
-      alert('재고 상태 연동 실패.');
-    }
-  } catch (err) {
-    hideLoader();
-    alert('에러: ' + err.message);
-  }
-};
-
 // -------------------------------------------------------------
 // TAB 2: PRICE COMPARISON & STRATEGY
 // -------------------------------------------------------------
@@ -929,7 +854,7 @@ window.runPriceMatchCrawler = async function(productId) {
   showLoader(`네이버 쇼핑에서 [${product.name}] 경쟁 업체 실시간 가격 파싱 및 파라미터 매칭 중...`);
   
   try {
-    const res = await fetch(`${API_BASE}/api/crawler/match`, {
+    const res = await resilientFetch(`/api/crawler/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productId })
@@ -1108,7 +1033,7 @@ async function handleAddProduct(e) {
   showLoader('새로운 여행 상품 등록 중...');
   
   try {
-    const res = await fetch(`${API_BASE}/api/products`, {
+    const res = await resilientFetch(`/api/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, price, marginRate, keywords })
@@ -1164,7 +1089,7 @@ async function handleKeywordSearch() {
   showLoader('네이버 키워드 도구 API에서 실시간 검색 지표 분석 중...');
   
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/keyword-info?keywords=${encodeURIComponent(query)}`);
+    const res = await resilientFetch(`/api/naver-ads/keyword-info?keywords=${encodeURIComponent(query)}`);
     const data = await res.json();
     
     hideLoader();
@@ -1350,7 +1275,7 @@ async function handleCampaignSelection() {
   showLoader('광고 그룹 리스트 가져오는 중...');
   
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/adgroups?campaignId=${campaignId}`);
+    const res = await resilientFetch(`/api/naver-ads/adgroups?campaignId=${campaignId}`);
     state.adgroups = await res.json();
     
     hideLoader();
@@ -1372,7 +1297,8 @@ async function handleCampaignSelection() {
     elements.bidNoDataMsg.innerText = '광고 그룹을 마저 선택하시면 키워드 입찰 목록이 조회됩니다.';
 
   } catch (err) {
-    handleFetchError(err);
+    hideLoader();
+    alert('광고 그룹 조회 실패: ' + err.message + '\n\n백엔드 서버 연결 상태를 확인해 주세요.');
   }
 }
 
@@ -1389,14 +1315,10 @@ async function handleAdgroupSelection() {
   
   try {
     // 1. Fetch keywords in ad group
-    const res = await fetch(`${API_BASE}/api/naver-ads/keywords?adgroupId=${adgroupId}`);
+    const res = await resilientFetch(`/api/naver-ads/keywords?adgroupId=${adgroupId}`);
     state.keywords = await res.json();
     
-    // 2. Fetch auto-bidding configurations
-    const autoBidRes = await fetch(`${API_BASE}/api/naver-ads/autobid-settings`);
-    state.autoBidSettings = await autoBidRes.json();
-
-    // 3. Fetch keyword monthly search stats from Naver API in batches of 5
+    // 2. Fetch keyword monthly search stats from Naver API in batches of 5
     state.keywordStats = {};
     if (state.keywords.length > 0) {
       const kwNames = state.keywords.map(k => k.keyword);
@@ -1408,7 +1330,7 @@ async function handleAdgroupSelection() {
       for (const batch of batches) {
         try {
           const query = batch.join(',');
-          const infoRes = await fetch(`${API_BASE}/api/naver-ads/keyword-info?keywords=${encodeURIComponent(query)}`);
+          const infoRes = await resilientFetch(`/api/naver-ads/keyword-info?keywords=${encodeURIComponent(query)}`);
           const infoData = await infoRes.json();
           if (infoData.keywordList) {
             infoData.keywordList.forEach(stat => {
@@ -1441,7 +1363,8 @@ async function handleAdgroupSelection() {
     }
 
   } catch (err) {
-    handleFetchError(err);
+    hideLoader();
+    alert('키워드 데이터 조회 실패: ' + err.message + '\n\n백엔드 서버 연결 상태를 확인해 주세요.');
   }
 }
 
@@ -1464,21 +1387,16 @@ function renderKeywordsBidTable() {
     // Create Bid Guide Badge
     let guideBadge = '<span class="badge badge-secondary" style="background:#4b5563;">⚪조회수 부족</span>';
     if (totalVol > 10000) {
-      guideBadge = '<span class="badge badge-danger" style="background:#ff5252; color:white; font-weight:600;">🔴고노출</span>';
+      guideBadge = '<span class="badge badge-danger" style="background:#ff5252; color:white; font-weight:600;">🔴고노출 키워드</span>';
     } else if (totalVol > 1000) {
-      guideBadge = '<span class="badge badge-warning" style="background:#ffc107; color:black; font-weight:600;">🟡중간</span>';
+      guideBadge = '<span class="badge badge-warning" style="background:#ffc107; color:black; font-weight:600;">🟡중간 키워드</span>';
     } else if (totalVol > 0) {
-      guideBadge = '<span class="badge badge-success" style="background:#00e676; color:black; font-weight:600;">🔵세부</span>';
+      guideBadge = '<span class="badge badge-success" style="background:#00e676; color:black; font-weight:600;">🔵세부 키워드</span>';
     }
 
     const isActive = kw.useYn !== undefined ? kw.useYn === 'Y' : kw.userLock === false;
     const statusText = isActive ? '노출 가능' : '일시 중지';
     const statusClass = isActive ? 'badge-success' : 'badge-secondary';
-
-    // Auto bidding settings for this keyword
-    const autoBid = (state.autoBidSettings && state.autoBidSettings[kw.nccKeywordId]) || { enabled: false, targetRank: '1-3' };
-    const autoBidEnabled = autoBid.enabled;
-    const autoBidRank = autoBid.targetRank || '1-3';
 
     tr.innerHTML = `
       <td style="text-align: center;">
@@ -1490,19 +1408,6 @@ function renderKeywordsBidTable() {
       <td style="color: var(--color-secondary); font-weight: 600;">₩${bidVal.toLocaleString()}</td>
       <td><span class="badge ${statusClass}">${statusText}</span></td>
       <td>${guideBadge}</td>
-      <td>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <label class="switch" style="transform:scale(0.85); margin:0;">
-            <input type="checkbox" id="autobid-toggle-${kw.nccKeywordId}" onchange="saveKeywordAutoBid('${kw.nccKeywordId}')" ${autoBidEnabled ? 'checked' : ''}>
-            <span class="slider-switch"></span>
-          </label>
-          <select class="select-control" style="width:75px; font-size:11px; height:24px; padding:0 4px; background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.12); color:white;" id="autobid-rank-${kw.nccKeywordId}" onchange="saveKeywordAutoBid('${kw.nccKeywordId}')">
-            <option value="1-3" ${autoBidRank === '1-3' ? 'selected' : ''}>1~3위</option>
-            <option value="3-5" ${autoBidRank === '3-5' ? 'selected' : ''}>3~5위</option>
-            <option value="5-10" ${autoBidRank === '5-10' ? 'selected' : ''}>5~10위</option>
-          </select>
-        </div>
-      </td>
       <td>
         <input type="number" class="input-control" value="${bidVal}" step="50" style="width: 90px; text-align: right; font-size:13px; height:32px; padding:0 8px;" id="bid-input-${kw.nccKeywordId}">
       </td>
@@ -1521,31 +1426,6 @@ function renderKeywordsBidTable() {
     tbody.appendChild(tr);
   });
 }
-
-window.saveKeywordAutoBid = async function(keywordId) {
-  const toggle = document.getElementById(`autobid-toggle-${keywordId}`);
-  const rankSelect = document.getElementById(`autobid-rank-${keywordId}`);
-  if (!toggle || !rankSelect) return;
-
-  const enabled = toggle.checked;
-  const targetRank = rankSelect.value;
-
-  try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/autobid-settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywordId, enabled, targetRank })
-    });
-    const data = await res.json();
-    
-    if (!state.autoBidSettings) state.autoBidSettings = {};
-    state.autoBidSettings[keywordId] = { enabled, targetRank };
-    
-    console.log(`[AUTOBID] Saved settings for keyword ${keywordId}: enabled=${enabled}, rank=${targetRank}`);
-  } catch (err) {
-    console.error('Failed to save auto bid settings:', err);
-  }
-};
 
 window.handleBidSelectAllToggle = function() {
   const isChecked = elements.bidSelectAll.checked;
@@ -1619,7 +1499,7 @@ window.saveBulkBidsToServer = async function() {
   let successCount = 0;
   for (const item of updates) {
     try {
-      const res = await fetch(`${API_BASE}/api/naver-ads/adjust-bid`, {
+      const res = await resilientFetch(`/api/naver-ads/adjust-bid`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keywordId: item.keywordId, bidAmt: item.bidAmt })
@@ -1664,7 +1544,7 @@ window.saveKeywordBid = async function(keywordId) {
   showLoader('네이버 검색광고 API 전송 및 서명 인증 진행 중...');
   
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/adjust-bid`, {
+    const res = await resilientFetch(`/api/naver-ads/adjust-bid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keywordId, bidAmt })
@@ -1733,7 +1613,7 @@ async function handleSaveSettings(e) {
   showLoader('네이버 API 자격증명 저장 및 HMAC 접속 연동 중...');
 
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/settings`, {
+    const res = await resilientFetch(`/api/naver-ads/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1791,7 +1671,7 @@ async function handleClearSettings() {
     : window.location.origin;
 
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/settings`, {
+    const res = await resilientFetch(`/api/naver-ads/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1867,7 +1747,7 @@ async function handleShoppingCampaignSelection() {
   showLoader('광고 그룹 리스트 가져오는 중...');
   
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/adgroups?campaignId=${campaignId}`);
+    const res = await resilientFetch(`/api/naver-ads/adgroups?campaignId=${campaignId}`);
     if (!res.ok) {
       const errText = await res.text();
       throw new Error(`HTTP ${res.status} - ${errText}`);
@@ -1894,7 +1774,8 @@ async function handleShoppingCampaignSelection() {
     elements.shopNoDataMsg.innerText = '광고 그룹을 마저 선택하시면 해당 그룹 내 등록된 상품 소재들을 불러옵니다.';
 
   } catch (err) {
-    handleFetchError(err);
+    hideLoader();
+    alert('에러: ' + err.message);
   }
 }
 
@@ -1915,7 +1796,7 @@ async function handleShoppingAdgroupSelection() {
   showLoader('광고 소재(소재/상품) 리스트 가져오는 중...');
   
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/ads?adgroupId=${adgroupId}`);
+    const res = await resilientFetch(`/api/naver-ads/ads?adgroupId=${adgroupId}`);
     if (!res.ok) {
       const errText = await res.text();
       throw new Error(`HTTP ${res.status} - ${errText}`);
@@ -1954,7 +1835,8 @@ async function handleShoppingAdgroupSelection() {
     elements.shopNoDataMsg.innerText = '3단계 광고 소재(상품)를 선택하시면 실시간 경쟁사 가격 파싱이 실행됩니다.';
 
   } catch (err) {
-    handleFetchError(err);
+    hideLoader();
+    alert('에러: ' + err.message);
   }
 }
 
@@ -2011,7 +1893,7 @@ async function handleShoppingAdSelection() {
   showLoader(`네이버 쇼핑에서 [${keyword}] 경쟁 업체 실시간 가격 파싱 및 순위 분석 중...`);
   
   try {
-    const res = await fetch(`${API_BASE}/api/crawler/match`, {
+    const res = await resilientFetch(`/api/crawler/match`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productId: adId, keyword, price, catalogId: ad.referenceKey })
@@ -2109,7 +1991,8 @@ async function handleShoppingAdSelection() {
       runShoppingSimulation();
     }
   } catch (err) {
-    handleFetchError(err);
+    hideLoader();
+    alert('에러: ' + err.message);
   }
 }
 
@@ -2124,7 +2007,7 @@ async function handleShoppingSyncBid() {
   showLoader(`네이버 광고 서버에 광고그룹 입찰가(CPC: ₩${targetCpc.toLocaleString()}) 동기화 중...`);
 
   try {
-    const res = await fetch(`${API_BASE}/api/naver-ads/adjust-adgroup-bid`, {
+    const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ adgroupId, bidAmt: targetCpc })
@@ -2411,10 +2294,10 @@ async function runCompetitiveScan(isAuto = false) {
   try {
     for (const campaign of state.campaigns) {
       if (campaign.campaignTp !== 'SHOPPING') continue;
-      const agRes = await fetch(`${API_BASE}/api/naver-ads/adgroups?campaignId=${campaign.nccCampaignId}`);
+      const agRes = await resilientFetch(`/api/naver-ads/adgroups?campaignId=${campaign.nccCampaignId}`);
       const adgroups = await agRes.json();
       for (const ag of adgroups) {
-        const adsRes = await fetch(`${API_BASE}/api/naver-ads/ads?adgroupId=${ag.nccAdgroupId}`);
+        const adsRes = await resilientFetch(`/api/naver-ads/ads?adgroupId=${ag.nccAdgroupId}`);
         const ads = await adsRes.json();
         for (const ad of ads) {
           const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
@@ -2446,7 +2329,7 @@ async function runCompetitiveScan(isAuto = false) {
     elements.compScanProgressFill.style.width = `${Math.round(((i+1)/total)*100)}%`;
     elements.compScanProgressText.innerText = `${i+1} / ${total} 상품 스캔 중...`;
     try {
-      const res = await fetch(`${API_BASE}/api/crawler/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: ad.adId, keyword: ad.adName, price: ad.price, catalogId: '' }) });
+      const res = await resilientFetch(`/api/crawler/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: ad.adId, keyword: ad.adName, price: ad.price, catalogId: '' }) });
       const data = await res.json();
       const competitors = (data.product?.competitors || []).filter(c => { const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub'); return !isOwn && c.price > 0; });
       const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;

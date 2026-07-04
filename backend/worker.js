@@ -256,73 +256,6 @@ export default {
         return jsonResponse(data, 200);
       }
 
-      // 11-2. GET /api/naver-ads/stats
-      if (path === '/api/naver-ads/stats' && request.method === 'GET') {
-        const db = await getDB(env);
-        const ids = url.searchParams.get('ids');
-        const fields = url.searchParams.get('fields') || 'impCnt,clkCnt,salesAmt,ctr,cpc,ccnt,crto,convAmt,ror,avgRnk';
-        
-        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const yyyy = yesterday.getFullYear();
-        const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
-        const dd = String(yesterday.getDate()).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`;
-        
-        const queryParams = {
-          ids,
-          fields,
-          timeRange: JSON.stringify({ startDate: dateStr, endDate: dateStr })
-        };
-        const data = await proxyNaverAds('GET', '/stat', queryParams, null, db.naverAdsSettings);
-        return jsonResponse(data, 200);
-      }
-
-      // 12. GET /api/naver-ads/autobid-settings
-      if (path === '/api/naver-ads/autobid-settings' && request.method === 'GET') {
-        const db = await getDB(env);
-        return jsonResponse(db.autoBidSettings || {}, 200);
-      }
-
-      // 13. POST /api/naver-ads/autobid-settings
-      if (path === '/api/naver-ads/autobid-settings' && request.method === 'POST') {
-        const db = await getDB(env);
-        const { keywordId, enabled, targetRank } = await request.json();
-        if (!keywordId) {
-          return jsonResponse({ error: 'Keyword ID is required.' }, 400);
-        }
-        if (!db.autoBidSettings) db.autoBidSettings = {};
-        db.autoBidSettings[keywordId] = {
-          enabled: !!enabled,
-          targetRank: targetRank || '1-3'
-        };
-        await saveDB(db, env);
-        return jsonResponse({ message: 'Auto-bidding configuration updated.', settings: db.autoBidSettings[keywordId] }, 200);
-      }
-
-      // 14. POST /api/naver-ads/toggle-product-stock
-      if (path === '/api/naver-ads/toggle-product-stock' && request.method === 'POST') {
-        const db = await getDB(env);
-        const { productId, stockStatus } = await request.json();
-        if (!productId || !stockStatus) {
-          return jsonResponse({ error: 'Product ID and stock status are required.' }, 400);
-        }
-        const product = db.products.find(p => p.id === productId);
-        if (!product) {
-          return jsonResponse({ error: 'Product not found.' }, 404);
-        }
-        product.stockStatus = stockStatus;
-        await saveDB(db, env);
-        
-        // Execute inline Out-of-Stock Ad Guard check
-        try {
-          await runOutOfStockAdGuardWorker(db, env);
-        } catch (e) {
-          console.warn('[Guard] Worker inline check error:', e.message);
-        }
-
-        return jsonResponse({ message: `Product stock status set to ${stockStatus}.`, product }, 200);
-      }
-
       return new Response('Not Found', { status: 404 });
 
     } catch (err) {
@@ -748,96 +681,12 @@ function getMockResponse(method, path, queryParams, body) {
 
   if (path.startsWith('/ncc/keywords/')) {
     const keywordId = path.split('/').pop();
-    if (body && body.userLock !== undefined) {
-      return { nccKeywordId: keywordId, userLock: body.userLock, result: 'SUCCESS_SIMULATED' };
-    }
     return {
       nccKeywordId: keywordId,
-      bidAmt: body ? body.bidAmt : undefined,
+      bidAmt: body.bidAmt,
       result: 'SUCCESS_SIMULATED'
     };
   }
 
-  if (path.startsWith('/ncc/ads/')) {
-    const adId = path.split('/').pop();
-    return { nccAdId: adId, userLock: body ? body.userLock : undefined, result: 'SUCCESS_SIMULATED' };
-  }
-
-  if (path === '/stat') {
-    const ids = (queryParams.ids || '').split(',');
-    const dataList = ids.map(id => {
-      const charSum = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const impCnt = 10000 + (charSum % 25000);
-      const clkCnt = Math.round(impCnt * (0.015 + (charSum % 100) / 10000));
-      const salesAmt = Math.round(clkCnt * (600 + (charSum % 1200)));
-      const ctr = parseFloat(((clkCnt / impCnt) * 100).toFixed(4));
-      const cpc = clkCnt > 0 ? Math.round(salesAmt / clkCnt) : 0;
-      const ccnt = Math.round(clkCnt * (0.02 + (charSum % 5) * 0.01));
-      const crto = clkCnt > 0 ? parseFloat(((ccnt / clkCnt) * 100).toFixed(4)) : 0;
-      const convAmt = ccnt * (45000 + (charSum % 150000));
-      const ror = salesAmt > 0 ? parseFloat(((convAmt / salesAmt) * 100).toFixed(2)) : 0;
-      const avgRnk = parseFloat((1.5 + (charSum % 35) / 10).toFixed(1));
-
-      return {
-        id: id,
-        impCnt,
-        clkCnt,
-        salesAmt,
-        ctr,
-        cpc,
-        ccnt,
-        crto,
-        convAmt,
-        ror,
-        avgRnk
-      };
-    });
-    return { data: dataList };
-  }
-
   return {};
 }
-
-// Inline Out-of-stock guard logic for worker
-async function runOutOfStockAdGuardWorker(db, env) {
-  const products = db.products || [];
-  const outOfStockProducts = products.filter(p => p.stockStatus === 'OUT_OF_STOCK');
-  const inStockProducts = products.filter(p => p.stockStatus !== 'OUT_OF_STOCK');
-
-  try {
-    const campaigns = await proxyNaverAds('GET', '/ncc/campaigns', {}, null, db.naverAdsSettings);
-    if (!campaigns || !Array.isArray(campaigns)) return;
-
-    for (const campaign of campaigns) {
-      if (campaign.campaignTp !== 'SHOPPING') continue;
-
-      const adgroups = await proxyNaverAds('GET', '/ncc/adgroups', { nccCampaignId: campaign.nccCampaignId }, null, db.naverAdsSettings);
-      if (!adgroups || !Array.isArray(adgroups)) continue;
-
-      for (const ag of adgroups) {
-        const ads = await proxyNaverAds('GET', '/ncc/ads', { nccAdgroupId: ag.nccAdgroupId }, null, db.naverAdsSettings);
-        if (!ads || !Array.isArray(ads)) continue;
-
-        for (const ad of ads) {
-          const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.name || '';
-          
-          const matchedOutOfStock = outOfStockProducts.find(p => adName.includes(p.name) || p.name.includes(adName));
-          const matchedInStock = inStockProducts.find(p => adName.includes(p.name) || p.name.includes(adName));
-
-          if (matchedOutOfStock) {
-            const isPaused = ad.userLock === true;
-            if (!isPaused) {
-              await proxyNaverAds('PUT', `/ncc/ads/${ad.nccAdId}`, { fields: 'userLock' }, { userLock: true }, db.naverAdsSettings);
-            }
-          } else if (matchedInStock) {
-            const isPaused = ad.userLock === true;
-            if (isPaused) {
-              await proxyNaverAds('PUT', `/ncc/ads/${ad.nccAdId}`, { fields: 'userLock' }, { userLock: false }, db.naverAdsSettings);
-            }
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[Worker Out-of-Stock Guard] Error:', err.message);
-  }
