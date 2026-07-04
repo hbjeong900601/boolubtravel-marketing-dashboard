@@ -33,6 +33,24 @@ let state = {
   }
 };
 
+// Global fetch error handler specifically designed to identify and guide mixed content HTTPS/HTTP blocks
+function handleFetchError(err) {
+  hideLoader();
+  const isHttps = window.location.protocol === 'https:';
+  const isHttpBackend = API_BASE.startsWith('http://');
+  
+  if (isHttps && isHttpBackend && (err.message.includes('Failed to fetch') || err.name === 'TypeError')) {
+    alert(`⚠️ [CORS / 보안 차단 안내]
+현재 보안 연결(HTTPS) 웹 페이지에서 로컬 서버(HTTP)로 API 요청을 보내어 브라우저 보안 규정(Mixed Content)에 의해 접속이 차단되었습니다.
+
+[해결 방법]
+1. 웹 브라우저 주소창에 로컬 주소인 'http://localhost:3000'을 직접 입력하여 접속해 주세요.
+2. 또는 제공해 드린 Cloudflare Tunnel HTTPS 주소로 접속하시면 차단 없이 완벽하게 연동됩니다.`);
+  } else {
+    alert('에러: ' + err.message);
+  }
+}
+
 // DOM Elements
 const elements = {
   // Navigation Tabs
@@ -1354,8 +1372,7 @@ async function handleCampaignSelection() {
     elements.bidNoDataMsg.innerText = '광고 그룹을 마저 선택하시면 키워드 입찰 목록이 조회됩니다.';
 
   } catch (err) {
-    hideLoader();
-    alert('에러: ' + err.message);
+    handleFetchError(err);
   }
 }
 
@@ -1424,8 +1441,7 @@ async function handleAdgroupSelection() {
     }
 
   } catch (err) {
-    hideLoader();
-    alert('에러: ' + err.message);
+    handleFetchError(err);
   }
 }
 
@@ -1878,8 +1894,7 @@ async function handleShoppingCampaignSelection() {
     elements.shopNoDataMsg.innerText = '광고 그룹을 마저 선택하시면 해당 그룹 내 등록된 상품 소재들을 불러옵니다.';
 
   } catch (err) {
-    hideLoader();
-    alert('에러: ' + err.message);
+    handleFetchError(err);
   }
 }
 
@@ -1939,8 +1954,7 @@ async function handleShoppingAdgroupSelection() {
     elements.shopNoDataMsg.innerText = '3단계 광고 소재(상품)를 선택하시면 실시간 경쟁사 가격 파싱이 실행됩니다.';
 
   } catch (err) {
-    hideLoader();
-    alert('에러: ' + err.message);
+    handleFetchError(err);
   }
 }
 
@@ -2095,8 +2109,7 @@ async function handleShoppingAdSelection() {
       runShoppingSimulation();
     }
   } catch (err) {
-    hideLoader();
-    alert('에러: ' + err.message);
+    handleFetchError(err);
   }
 }
 
