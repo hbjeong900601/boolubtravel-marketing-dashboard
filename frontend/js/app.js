@@ -1829,8 +1829,15 @@ async function handleShoppingAdgroupSelection() {
       select.disabled = true;
     } else {
       // Filter to only show eligible (active) ads
-      const eligibleAds = state.shopAds.filter(ad => ad.inspectStatus === 'ELIGIBLE' && !ad.userLock);
-      const pausedAds = state.shopAds.filter(ad => ad.inspectStatus !== 'ELIGIBLE' || ad.userLock);
+      // Filter: active ads (ELIGIBLE or APPROVED, not locked, useYn != N)
+      const isAdActive = (ad) => {
+        const statusOk = !ad.inspectStatus || ad.inspectStatus === 'ELIGIBLE' || ad.inspectStatus === 'APPROVED';
+        const notLocked = ad.userLock !== true;
+        const useOk = ad.useYn !== 'N';
+        return statusOk && notLocked && useOk;
+      };
+      const eligibleAds = state.shopAds.filter(isAdActive);
+      const pausedAds = state.shopAds.filter(ad => !isAdActive(ad));
       
       if (eligibleAds.length > 0) {
         const grp1 = document.createElement('optgroup');
@@ -2354,8 +2361,11 @@ async function runCompetitiveScan(isAuto = false) {
       for (const ag of adgroups) {
         const adsRes = await resilientFetch(`/api/naver-ads/ads?adgroupId=${ag.nccAdgroupId}`);
         const ads = await adsRes.json();
-        // Filter: only scan ELIGIBLE (운영 가능) ads
-        const eligibleAds = ads.filter(ad => ad.inspectStatus === 'ELIGIBLE' && !ad.userLock);
+        // Filter: only scan active (ELIGIBLE/APPROVED, not locked) ads
+        const eligibleAds = ads.filter(ad => {
+          const statusOk = !ad.inspectStatus || ad.inspectStatus === 'ELIGIBLE' || ad.inspectStatus === 'APPROVED';
+          return statusOk && ad.userLock !== true && ad.useYn !== 'N';
+        });
         for (const ad of eligibleAds) {
           const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
           const price = parseInt(ad.referenceData?.price, 10) || parseInt(ad.referenceData?.lowPrice, 10) || parseInt(ad.adAttr?.price, 10) || 0;
@@ -2507,8 +2517,11 @@ async function runGroupCompetitiveScan() {
   try {
     const adsRes = await resilientFetch(`/api/naver-ads/ads?adgroupId=${adgroupId}`);
     const rawAds = await adsRes.json();
-    // Filter: only scan ELIGIBLE (운영 가능) ads
-    const ads = rawAds.filter(ad => ad.inspectStatus === 'ELIGIBLE' && !ad.userLock);
+    // Filter: only scan active (ELIGIBLE/APPROVED, not locked) ads
+    const ads = rawAds.filter(ad => {
+      const statusOk = !ad.inspectStatus || ad.inspectStatus === 'ELIGIBLE' || ad.inspectStatus === 'APPROVED';
+      return statusOk && ad.userLock !== true && ad.useYn !== 'N';
+    });
 
     const allAds = [];
     for (const ad of ads) {
