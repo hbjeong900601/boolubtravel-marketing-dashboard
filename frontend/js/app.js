@@ -2868,19 +2868,23 @@ function renderCompetitiveKPIs() {
 }
 
 function drawCompetitiveChart() {
+  const canvas = document.getElementById('comp-distribution-chart');
+  if (!canvas) return;
   const data = state.competitiveData;
   if (data.length === 0) return;
   const counts = { lowest: data.filter(d => d.status === 'lowest').length, close: data.filter(d => d.status === 'close').length, disadvantage: data.filter(d => d.status === 'disadvantage').length, monopoly: data.filter(d => d.status === 'monopoly').length };
-  const ctx = document.getElementById('comp-distribution-chart').getContext('2d');
+  const ctx = canvas.getContext('2d');
   if (state.charts.competitive) state.charts.competitive.destroy();
   const colors = ['#00e676', '#ffc107', '#ff5252', '#a78bfa'];
   const labels = ['최저가', '근접', '열위', '독점'];
   const values = [counts.lowest, counts.close, counts.disadvantage, counts.monopoly];
   state.charts.competitive = new Chart(ctx, { type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const t = ctx.dataset.data.reduce((a,b) => a+b, 0); return `${ctx.label}: ${ctx.raw}개 (${t > 0 ? ((ctx.raw/t)*100).toFixed(1) : 0}%)`; } } } } } });
-  elements.compChartLegend.innerHTML = labels.map((l, i) => `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`).join('');
+  if (elements.compChartLegend) elements.compChartLegend.innerHTML = labels.map((l, i) => `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`).join('');
 }
 
 function renderStrategySummary() {
+  const container = document.getElementById('comp-strategy-summary');
+  if (!container) return;
   const data = state.competitiveData;
   if (data.length === 0) return;
   const lc = data.filter(d => d.status === 'lowest').length, cc = data.filter(d => d.status === 'close').length, dc = data.filter(d => d.status === 'disadvantage').length, mc = data.filter(d => d.status === 'monopoly').length;
@@ -2890,7 +2894,7 @@ function renderStrategySummary() {
   if (dc > 0) { const top = data.filter(d => d.status === 'disadvantage').sort((a,b) => b.gap - a.gap).slice(0,3); items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${dc}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나, 가격 인하 프로모션을 검토하세요. 주요: ${top.map(d => `"${d.adName.substring(0,20)}…" (+₩${d.gap.toLocaleString()})`).join(', ')}</div></div>`); }
   if (mc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${mc}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가로 효율적 운영이 가능합니다.</div></div>`);
   if (items.length === 0) items.push(`<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>`);
-  elements.compStrategySummary.innerHTML = items.join('');
+  container.innerHTML = items.join('');
 }
 
 function exportCompetitiveCSV() {
