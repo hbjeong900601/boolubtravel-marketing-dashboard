@@ -187,7 +187,10 @@ const elements = {
   compBulkBar: document.getElementById('comp-bulk-bar'),
   compSelectAll: document.getElementById('comp-select-all'),
   compSelectCount: document.getElementById('comp-select-count'),
-  compBulkCpcInput: document.getElementById('comp-bulk-cpc-input')
+  compBulkCpcInput: document.getElementById('comp-bulk-cpc-input'),
+  compCampaignSelect: document.getElementById('comp-campaign-select'),
+  compAdgroupSelect: document.getElementById('comp-adgroup-select'),
+  compGroupScanBtn: document.getElementById('comp-group-scan-btn')
 };
 
 // -------------------------------------------------------------
@@ -301,6 +304,9 @@ function setupEventListeners() {
   elements.compSortSelect.addEventListener('change', renderCompetitiveTable);
   elements.compExportCsvBtn.addEventListener('click', exportCompetitiveCSV);
   elements.compSelectAll.addEventListener('change', handleCompSelectAllToggle);
+  elements.compCampaignSelect.addEventListener('change', handleCompCampaignSelection);
+  elements.compAdgroupSelect.addEventListener('change', handleCompAdgroupSelection);
+  elements.compGroupScanBtn.addEventListener('click', runGroupCompetitiveScan);
 
   // Settings Save
   elements.apiSettingsForm.addEventListener('submit', handleSaveSettings);
@@ -488,6 +494,7 @@ async function fetchCampaigns() {
     const res = await resilientFetch(`/api/naver-ads/campaigns`);
     state.campaigns = await res.json();
     populateCampaignDropdown();
+    populateCompCampaignDropdown();
   } catch (err) {
     console.error('Failed to fetch campaigns:', err);
   }
@@ -2340,7 +2347,7 @@ async function runCompetitiveScan(isAuto = false) {
       const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
       const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
       const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
-      state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName });
+      state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: 0 });
     } catch (err) { console.warn(`Scan failed for ${ad.adName}:`, err.message); }
     if (i < total - 1) await new Promise(r => setTimeout(r, 300));
   }
@@ -2389,6 +2396,143 @@ function getPriceChangeHtml(item) {
   return '<span class="price-change" style="color:rgba(255,255,255,0.3);">—</span>';
 }
 
+// --- Competitive Analysis: Ad Group Workflow ---
+
+function populateCompCampaignDropdown() {
+  const select = elements.compCampaignSelect;
+  select.innerHTML = '<option value="">캠페인을 선택하세요</option>';
+  const shoppingCampaigns = state.campaigns.filter(c => c.campaignTp === 'SHOPPING');
+  shoppingCampaigns.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.nccCampaignId;
+    opt.innerText = c.name;
+    select.appendChild(opt);
+  });
+}
+
+async function handleCompCampaignSelection() {
+  const campaignId = elements.compCampaignSelect.value;
+  elements.compAdgroupSelect.disabled = true;
+  elements.compAdgroupSelect.innerHTML = '<option value="">광고 그룹을 선택하세요</option>';
+  elements.compGroupScanBtn.disabled = true;
+  if (!campaignId) return;
+
+  showLoader('광고 그룹 리스트 가져오는 중...');
+  try {
+    const res = await resilientFetch(`/api/naver-ads/adgroups?campaignId=${campaignId}`);
+    const adgroups = await res.json();
+    hideLoader();
+    elements.compAdgroupSelect.disabled = false;
+    adgroups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.nccAdgroupId;
+      opt.innerText = g.name;
+      opt.dataset.bidAmt = g.bidAmt || 0;
+      elements.compAdgroupSelect.appendChild(opt);
+    });
+  } catch (err) {
+    hideLoader();
+    alert('광고 그룹 조회 실패: ' + err.message);
+  }
+}
+
+function handleCompAdgroupSelection() {
+  const adgroupId = elements.compAdgroupSelect.value;
+  elements.compGroupScanBtn.disabled = !adgroupId;
+}
+
+async function runGroupCompetitiveScan() {
+  const campaignId = elements.compCampaignSelect.value;
+  const adgroupId = elements.compAdgroupSelect.value;
+  if (!campaignId || !adgroupId) {
+    alert('캠페인과 광고 그룹을 선택해 주세요.');
+    return;
+  }
+
+  const selectedOption = elements.compAdgroupSelect.selectedOptions[0];
+  const groupBidAmt = parseInt(selectedOption?.dataset?.bidAmt, 10) || 0;
+  const campaignName = elements.compCampaignSelect.selectedOptions[0]?.text || '';
+  const adgroupName = selectedOption?.text || '';
+
+  elements.compGroupScanBtn.disabled = true;
+  elements.compScanProgressWrapper.style.display = 'flex';
+  elements.compScanProgressFill.style.width = '0%';
+  elements.compScanProgressText.innerText = '광고 소재 목록 가져오는 중...';
+
+  try {
+    const adsRes = await resilientFetch(`/api/naver-ads/ads?adgroupId=${adgroupId}`);
+    const ads = await adsRes.json();
+
+    const allAds = [];
+    for (const ad of ads) {
+      const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
+      const price = parseInt(ad.referenceData?.price, 10) || parseInt(ad.referenceData?.lowPrice, 10) || parseInt(ad.adAttr?.price, 10) || 0;
+      if (adName && price > 0) {
+        allAds.push({ adId: ad.nccAdId, adName, price, campaignId, campaignName, adgroupId, adgroupName, referenceData: ad.referenceData });
+      }
+    }
+
+    if (allAds.length === 0) {
+      elements.compGroupScanBtn.disabled = false;
+      elements.compScanProgressWrapper.style.display = 'none';
+      alert('이 광고 그룹에 스캔 가능한 소재가 없습니다.');
+      return;
+    }
+
+    state.competitiveData = [];
+    const total = allAds.length;
+    for (let i = 0; i < total; i++) {
+      const ad = allAds[i];
+      elements.compScanProgressFill.style.width = `${Math.round(((i+1)/total)*100)}%`;
+      elements.compScanProgressText.innerText = `${i+1} / ${total} 상품 스캔 중...`;
+      try {
+        const res = await resilientFetch(`/api/crawler/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: ad.adId, keyword: ad.adName, price: ad.price, catalogId: '' }) });
+        const data = await res.json();
+        const competitors = (data.product?.competitors || []).filter(c => { const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub'); return !isOwn && c.price > 0; });
+        const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
+        const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
+        const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
+        state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: groupBidAmt });
+      } catch (err) { console.warn(`Scan failed for ${ad.adName}:`, err.message); }
+      if (i < total - 1) await new Promise(r => setTimeout(r, 300));
+    }
+
+    elements.compScanProgressWrapper.style.display = 'none';
+    elements.compGroupScanBtn.disabled = false;
+    elements.compLastScanTime.innerText = formatScanTime(new Date());
+
+    const disadvantaged = state.competitiveData.filter(d => d.status === 'disadvantage');
+    if (disadvantaged.length > 0) {
+      elements.compAlertBanner.style.display = 'flex';
+      elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다. CPC 조정 또는 가격 검토가 필요합니다.`;
+    } else { elements.compAlertBanner.style.display = 'none'; }
+
+    elements.compExportCsvBtn.disabled = false;
+    renderCompetitiveTable();
+    renderCompetitiveKPIs();
+    drawCompetitiveChart();
+    renderStrategySummary();
+
+  } catch (err) {
+    elements.compGroupScanBtn.disabled = false;
+    elements.compScanProgressWrapper.style.display = 'none';
+    alert('스캔 실패: ' + err.message);
+  }
+}
+
+function getRecommendedCpc(item) {
+  const currentCpc = item.currentCpc || 0;
+  if (item.status === 'lowest') {
+    return { value: Math.max(Math.round(currentCpc * 1.2 / 10) * 10, currentCpc + 100, 200), label: '↑ 공격', color: '#00e676', tip: '최저가 우위 → CPC 올려 노출 확대' };
+  } else if (item.status === 'close') {
+    return { value: currentCpc || 150, label: '→ 유지', color: '#ffc107', tip: '경쟁 근접 → 현재 CPC 유지 권장' };
+  } else if (item.status === 'disadvantage') {
+    return { value: Math.max(Math.round(currentCpc * 0.7 / 10) * 10, 70), label: '↓ 절감', color: '#ff5252', tip: '가격 열위 → CPC 낮춰 비용 절감' };
+  } else {
+    return { value: 70, label: '↓ 최소', color: '#a78bfa', tip: '독점 → 최소 입찰가로 효율 운영' };
+  }
+}
+
 function renderCompetitiveTable() {
   const filter = elements.compStatusFilter.value;
   const sort = elements.compSortSelect.value;
@@ -2403,7 +2547,6 @@ function renderCompetitiveTable() {
     case 'name-asc': data.sort((a, b) => a.adName.localeCompare(b.adName)); break;
   }
 
-  // Show/hide bulk bar
   if (data.length > 0) {
     elements.compBulkBar.style.display = 'flex';
     elements.compSelectAll.checked = false;
@@ -2415,38 +2558,43 @@ function renderCompetitiveTable() {
   if (data.length === 0) { elements.compTableTbody.innerHTML = `<tr><td colspan="12" style="text-align:center; opacity:0.5; padding:40px;">필터 조건에 맞는 상품이 없습니다.</td></tr>`; return; }
 
   elements.compTableTbody.innerHTML = data.map((item, idx) => {
-    const strategy = getCompetitiveStrategy(item.status);
     const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
     let gapHtml = item.gap === null ? '<span class="gap-zero">-</span>' : item.gap > 0 ? `<span class="gap-positive">+₩${item.gap.toLocaleString()}</span>` : item.gap < 0 ? `<span class="gap-negative">-₩${Math.abs(item.gap).toLocaleString()}</span>` : '<span class="gap-zero">₩0</span>';
     
-    // Default CPC value (use stored value if available, otherwise 0)
-    const cpcVal = item.currentCpc || 0;
+    const currentCpc = item.currentCpc || 0;
+    const rec = getRecommendedCpc(item);
 
     return `<tr>
       <td style="text-align:center;">
         <input type="checkbox" class="comp-kw-checkbox" data-idx="${idx}" data-adgroup-id="${item.adgroupId}" onchange="updateCompSelectedCount()" style="cursor:pointer; width:15px; height:15px;">
       </td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.adName}">${item.adName}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.adName}">${item.adName}</td>
       <td>₩${item.price.toLocaleString()}</td>
       <td>${item.minCompPrice !== null ? '₩' + item.minCompPrice.toLocaleString() : '-'}</td>
       <td>${gapHtml}</td>
-      <td>${getPriceChangeHtml(item)}</td>
       <td><span class="comp-badge comp-badge-${item.status}">${badgeLabels[item.status] || '-'}</span></td>
-      <td>${item.minCompName}</td>
+      <td style="font-size:12px;">${item.minCompName}</td>
       <td>${item.competitorCount}개</td>
+      <td style="color:var(--color-secondary); font-weight:600;">${currentCpc > 0 ? '₩' + currentCpc.toLocaleString() : '-'}</td>
       <td>
-        <div style="display:flex; align-items:center; gap:4px;">
-          <input type="number" class="input-control comp-cpc-input" value="${cpcVal}" step="50" min="70"
+        <span style="cursor:help; font-weight:600; color:${rec.color};" title="${rec.tip}">
+          ${rec.value > 0 ? '₩' + rec.value.toLocaleString() : '-'}
+          <span style="font-size:10px; opacity:0.8;">${rec.label}</span>
+        </span>
+      </td>
+      <td>
+        <div style="display:flex; align-items:center; gap:3px;">
+          <input type="number" class="input-control comp-cpc-input" value="${rec.value || currentCpc}" step="50" min="70"
             data-adgroup-id="${item.adgroupId}" id="comp-cpc-${item.adgroupId}"
-            style="width:80px; text-align:right; font-size:12px; height:28px; padding:0 6px;">
-          <button class="btn btn-naver btn-sm" style="padding:2px 6px; font-size:11px; height:26px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adgroupId}')">전송</button>
+            style="width:75px; text-align:right; font-size:12px; height:26px; padding:0 5px;">
+          <button class="btn btn-naver btn-sm" style="padding:2px 5px; font-size:10px; height:24px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adgroupId}')">전송</button>
         </div>
       </td>
-      <td><span class="comp-strategy-mini">${strategy.emoji} ${strategy.label}</span></td>
-      <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.campaignId}','${item.adgroupId}','${item.adId}')">상세 분석</button></td>
+      <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.campaignId}','${item.adgroupId}','${item.adId}')">상세</button></td>
     </tr>`;
   }).join('');
 }
+
 
 // --- Competitive Table Bulk Management Functions ---
 
