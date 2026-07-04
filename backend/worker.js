@@ -235,7 +235,21 @@ export default {
       if (path === '/api/naver-ads/adjust-adgroup-bid' && request.method === 'POST') {
         const db = await getDB(env);
         const { adgroupId, bidAmt } = await request.json();
-        const data = await proxyNaverAds('PUT', `/ncc/adgroups/${adgroupId}`, {}, { bidAmt }, db.naverAdsSettings);
+        // Naver API requires full adgroup object for PUT updates
+        // 1. GET current adgroup
+        const current = await proxyNaverAds('GET', `/ncc/adgroups/${adgroupId}`, {}, null, db.naverAdsSettings);
+        if (!current || !current.nccAdgroupId) {
+          return jsonResponse({ error: 'Failed to fetch current adgroup data' }, 400);
+        }
+        // 2. Modify bidAmt and remove read-only fields
+        current.bidAmt = parseInt(bidAmt, 10);
+        delete current.editTm;
+        delete current.regTm;
+        delete current.targets;
+        delete current.targetSummary;
+        delete current.expectCost;
+        // 3. PUT full updated object
+        const data = await proxyNaverAds('PUT', `/ncc/adgroups/${adgroupId}`, {}, current, db.naverAdsSettings);
         return jsonResponse(data, 200);
       }
 
@@ -260,7 +274,15 @@ export default {
       if (path === '/api/naver-ads/toggle-ad' && request.method === 'POST') {
         const db = await getDB(env);
         const { adId, userLock } = await request.json();
-        const data = await proxyNaverAds('PUT', `/ncc/ads/${adId}`, {}, { userLock }, db.naverAdsSettings);
+        // Naver API requires full ad object for PUT
+        const current = await proxyNaverAds('GET', `/ncc/ads/${adId}`, {}, null, db.naverAdsSettings);
+        if (!current || !current.nccAdId) {
+          return jsonResponse({ error: 'Failed to fetch current ad data' }, 400);
+        }
+        current.userLock = userLock;
+        delete current.editTm;
+        delete current.regTm;
+        const data = await proxyNaverAds('PUT', `/ncc/ads/${adId}`, {}, current, db.naverAdsSettings);
         return jsonResponse(data, 200);
       }
 

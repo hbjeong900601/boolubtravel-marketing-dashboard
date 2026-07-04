@@ -130,19 +130,45 @@ class NaverAdsAPI {
 
   /**
    * Adjust Ad Group Bid
+   * Naver API requires the full adgroup object for PUT updates.
+   * We GET the current state first, then modify bidAmt and PUT back.
    */
   async adjustAdGroupBid(adgroupId, bidAmt) {
     const path = `/ncc/adgroups/${adgroupId}`;
-    return this.request('PUT', path, {}, { bidAmt });
+    // 1. Get current full adgroup object
+    const current = await this.request('GET', path);
+    if (!current || !current.nccAdgroupId) {
+      throw new Error('Failed to fetch current adgroup data');
+    }
+    // 2. Modify bidAmt and remove read-only fields
+    current.bidAmt = bidAmt;
+    delete current.editTm;
+    delete current.regTm;
+    delete current.targets;
+    delete current.targetSummary;
+    delete current.expectCost;
+    // 3. PUT full updated object
+    return this.request('PUT', path, {}, current);
   }
 
   /**
    * Toggle Ad userLock (on/off)
    * userLock: true = paused, false = active
+   * Naver API requires the full ad object for PUT updates.
    */
   async toggleAd(adId, userLock) {
     const path = `/ncc/ads/${adId}`;
-    return this.request('PUT', path, {}, { userLock });
+    // 1. Get current full ad object
+    const current = await this.request('GET', path);
+    if (!current || !current.nccAdId) {
+      throw new Error('Failed to fetch current ad data');
+    }
+    // 2. Modify userLock and remove read-only fields
+    current.userLock = userLock;
+    delete current.editTm;
+    delete current.regTm;
+    // 3. PUT full updated object
+    return this.request('PUT', path, {}, current);
   }
 
   /**
