@@ -53,6 +53,7 @@ const elements = {
   overviewCampaignTableBody: document.getElementById('overview-campaign-table-body'),
   overviewInsights: document.getElementById('overview-insights'),
   overviewRefreshTableBtn: document.getElementById('overview-refresh-table-btn'),
+  overviewStockTableBody: document.getElementById('overview-stock-table-body'),
 
   // Tab 2: Compare
   compareProductTableBody: document.getElementById('compare-product-table-body'),
@@ -192,6 +193,7 @@ async function initApp() {
   renderOverviewInsights();
   renderCampaignsTable();
   renderProductsTable();
+  renderStockTable();
   updateOverviewKPIs();
   
   hideLoader();
@@ -373,6 +375,7 @@ async function runGlobalSync() {
     renderCampaignsTable();
     renderProductsTable();
     renderOverviewInsights();
+    renderStockTable();
     updateOverviewKPIs();
     
     if (state.selectedProduct) {
@@ -486,19 +489,36 @@ function updateConnectionStatusUI() {
 // TAB 1: OVERVIEW RENDERING
 // -------------------------------------------------------------
 
-function updateOverviewKPIs() {
+async function fetchOverviewStats() {
+  const isRealConnection = state.settings && state.settings.isConnected;
+  if (!isRealConnection || !state.campaigns || state.campaigns.length === 0) {
+    return null;
+  }
+  
+  const activeIds = state.campaigns
+    .filter(c => (c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false))
+    .map(c => c.nccCampaignId);
+    
+  if (activeIds.length === 0) return null;
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/naver-ads/stats?ids=${activeIds.join(',')}`);
+    const statsData = await res.json();
+    return statsData.data || [];
+  } catch (err) {
+    console.warn('Failed to fetch campaign stats:', err);
+    return null;
+  }
+}
+
+async function updateOverviewKPIs() {
   const isRealConnection = state.settings && state.settings.isConnected;
   
   let activeDailyBudgetSum = 0;
-  let totalChargeCostSum = 0;
-  let expectCostSum = 0;
-  
   state.campaigns.forEach(c => {
     const isActive = c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false;
     if (isActive) {
       activeDailyBudgetSum += (c.dailyBudget !== undefined ? c.dailyBudget : (c.userLimitAmt || 0));
-      totalChargeCostSum += (c.totalChargeCost || 0);
-      expectCostSum += (c.expectCost || 0);
     }
   });
 
@@ -508,51 +528,50 @@ function updateOverviewKPIs() {
     totalMonthlyBudget = 1000000; // Default Mock
   }
 
-  // Calculate Spent
-  let spentAmt = totalChargeCostSum;
-  if (!isRealConnection || spentAmt === 0) {
-    spentAmt = 462800; // Default Mock
-  } else {
-    // If it's real, scale realistically based on daily budget if charge costs are zero
-    if (spentAmt < 1000) {
-      spentAmt = Math.round(activeDailyBudgetSum * 0.463) || 462800;
-    }
+  // Fetch real statistics
+  const statsList = await fetchOverviewStats();
+  
+  let totalImp = 0;
+  let totalClicks = 0;
+  let totalSpent = 0;
+  let totalConversions = 0;
+  let totalConvAmt = 0;
+
+  if (statsList && statsList.length > 0) {
+    statsList.forEach(s => {
+      totalImp += s.impCnt || 0;
+      totalClicks += s.clkCnt || 0;
+      totalSpent += s.salesAmt || 0;
+      totalConversions += s.ccnt || 0;
+      totalConvAmt += s.convAmt || 0;
+    });
   }
 
-  // Calculate Clicks
-  let clicksCount = Math.round(spentAmt / 1200);
-  if (!isRealConnection || clicksCount === 0) {
-    clicksCount = 382; // Default Mock
+  // Fallbacks if stats are empty or simulation mode
+  if (totalSpent === 0) {
+    totalSpent = Math.round(activeDailyBudgetSum * 0.463) || 462800;
   }
-
-  // Clicks subtext CTR
-  let ctrVal = 1.84;
-  if (isRealConnection) {
-    ctrVal = (1.5 + (state.campaigns.length % 10) * 0.1).toFixed(2);
+  if (totalClicks === 0) {
+    totalClicks = Math.round(totalSpent / 1200) || 382;
   }
-
-  // Calculate ROAS
-  let roasVal = 342;
-  if (isRealConnection) {
-    const activeCount = state.campaigns.filter(c => (c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false)).length;
-    roasVal = 280 + (activeCount * 15);
-    if (roasVal > 450) roasVal = 450;
-  }
+  
+  const ctrVal = totalImp > 0 ? ((totalClicks / totalImp) * 100).toFixed(2) : (1.5 + (state.campaigns.length % 10) * 0.1).toFixed(2);
+  const roasVal = totalSpent > 0 ? Math.round((totalConvAmt / totalSpent) * 100) : (280 + (state.campaigns.filter(c => (c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false)).length * 15));
 
   // Update DOM Elements
   if (elements.kpiTotalBudget) {
     elements.kpiTotalBudget.innerText = `₩${totalMonthlyBudget.toLocaleString()}`;
   }
   if (elements.kpiSpent) {
-    elements.kpiSpent.innerText = `₩${spentAmt.toLocaleString()}`;
+    elements.kpiSpent.innerText = `₩${totalSpent.toLocaleString()}`;
   }
   const spentPercentEl = document.getElementById('kpi-spent-percent');
   if (spentPercentEl) {
-    const spentPercent = ((spentAmt / totalMonthlyBudget) * 100).toFixed(1);
+    const spentPercent = ((totalSpent / totalMonthlyBudget) * 100).toFixed(1);
     spentPercentEl.innerText = `${spentPercent}%`;
   }
   if (elements.kpiClicks) {
-    elements.kpiClicks.innerText = `${clicksCount.toLocaleString()} Clicks`;
+    elements.kpiClicks.innerText = `${totalClicks.toLocaleString()} Clicks`;
   }
   const ctrEl = document.querySelector('.kpi-card.naver .kpi-sub span');
   if (ctrEl) {
@@ -563,7 +582,7 @@ function updateOverviewKPIs() {
   }
 
   // Render Chart
-  updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount);
+  updateOverviewChart(isRealConnection, activeDailyBudgetSum, totalSpent, totalClicks);
 }
 
 function updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount) {
@@ -741,6 +760,63 @@ window.toggleCampaignActive = function(campaignId, active) {
     }
     // Update Overview KPIs & Chart in real-time!
     updateOverviewKPIs();
+  }
+};
+
+function renderStockTable() {
+  const tbody = elements.overviewStockTableBody;
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (state.products.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">등록된 여행 상품이 없습니다.</td></tr>`;
+    return;
+  }
+
+  state.products.forEach(p => {
+    const tr = document.createElement('tr');
+    const isOut = p.stockStatus === 'OUT_OF_STOCK';
+    const statusText = isOut ? '🔴 품절 (광고 차단됨)' : '🟢 판매중 (정상 광고)';
+    const statusClass = isOut ? 'badge-danger' : 'badge-success';
+
+    tr.innerHTML = `
+      <td style="color:var(--text-muted); font-size:12px;">${p.id}</td>
+      <td style="font-weight:600; color:white;">${p.name}</td>
+      <td>₩${p.price.toLocaleString()}</td>
+      <td><span class="badge ${statusClass}">${statusText}</span></td>
+      <td>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-secondary btn-sm" style="padding:4px 8px; font-size:11px;" onclick="toggleProductStock('${p.id}', 'IN_STOCK')" ${!isOut ? 'disabled' : ''}>판매중 처리</button>
+          <button class="btn btn-danger btn-sm" style="padding:4px 8px; font-size:11px; background:#ff5252; border-color:#ff5252;" onclick="toggleProductStock('${p.id}', 'OUT_OF_STOCK')" ${isOut ? 'disabled' : ''}>품절 처리</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+window.toggleProductStock = async function(productId, stockStatus) {
+  showLoader('자사 상품 재고 연동 및 네이버 광고 가드 처리 중...');
+  try {
+    const res = await fetch(`${API_BASE}/api/naver-ads/toggle-product-stock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId, stockStatus })
+    });
+    const data = await res.json();
+    hideLoader();
+
+    if (data.product) {
+      const p = state.products.find(x => x.id === productId);
+      if (p) p.stockStatus = stockStatus;
+      renderStockTable();
+      alert(`성공적으로 상품 상태를 [${stockStatus === 'OUT_OF_STOCK' ? '품절' : '판매중'}]으로 동기화했습니다! 관련 광고 스캔 및 가드가 즉시 실행되었습니다.`);
+    } else {
+      alert('재고 상태 연동 실패.');
+    }
+  } catch (err) {
+    hideLoader();
+    alert('에러: ' + err.message);
   }
 };
 
@@ -1299,7 +1375,11 @@ async function handleAdgroupSelection() {
     const res = await fetch(`${API_BASE}/api/naver-ads/keywords?adgroupId=${adgroupId}`);
     state.keywords = await res.json();
     
-    // 2. Fetch keyword monthly search stats from Naver API in batches of 5
+    // 2. Fetch auto-bidding configurations
+    const autoBidRes = await fetch(`${API_BASE}/api/naver-ads/autobid-settings`);
+    state.autoBidSettings = await autoBidRes.json();
+
+    // 3. Fetch keyword monthly search stats from Naver API in batches of 5
     state.keywordStats = {};
     if (state.keywords.length > 0) {
       const kwNames = state.keywords.map(k => k.keyword);
@@ -1368,16 +1448,21 @@ function renderKeywordsBidTable() {
     // Create Bid Guide Badge
     let guideBadge = '<span class="badge badge-secondary" style="background:#4b5563;">⚪조회수 부족</span>';
     if (totalVol > 10000) {
-      guideBadge = '<span class="badge badge-danger" style="background:#ff5252; color:white; font-weight:600;">🔴고노출 키워드</span>';
+      guideBadge = '<span class="badge badge-danger" style="background:#ff5252; color:white; font-weight:600;">🔴고노출</span>';
     } else if (totalVol > 1000) {
-      guideBadge = '<span class="badge badge-warning" style="background:#ffc107; color:black; font-weight:600;">🟡중간 키워드</span>';
+      guideBadge = '<span class="badge badge-warning" style="background:#ffc107; color:black; font-weight:600;">🟡중간</span>';
     } else if (totalVol > 0) {
-      guideBadge = '<span class="badge badge-success" style="background:#00e676; color:black; font-weight:600;">🔵세부 키워드</span>';
+      guideBadge = '<span class="badge badge-success" style="background:#00e676; color:black; font-weight:600;">🔵세부</span>';
     }
 
     const isActive = kw.useYn !== undefined ? kw.useYn === 'Y' : kw.userLock === false;
     const statusText = isActive ? '노출 가능' : '일시 중지';
     const statusClass = isActive ? 'badge-success' : 'badge-secondary';
+
+    // Auto bidding settings for this keyword
+    const autoBid = (state.autoBidSettings && state.autoBidSettings[kw.nccKeywordId]) || { enabled: false, targetRank: '1-3' };
+    const autoBidEnabled = autoBid.enabled;
+    const autoBidRank = autoBid.targetRank || '1-3';
 
     tr.innerHTML = `
       <td style="text-align: center;">
@@ -1389,6 +1474,19 @@ function renderKeywordsBidTable() {
       <td style="color: var(--color-secondary); font-weight: 600;">₩${bidVal.toLocaleString()}</td>
       <td><span class="badge ${statusClass}">${statusText}</span></td>
       <td>${guideBadge}</td>
+      <td>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <label class="switch" style="transform:scale(0.85); margin:0;">
+            <input type="checkbox" id="autobid-toggle-${kw.nccKeywordId}" onchange="saveKeywordAutoBid('${kw.nccKeywordId}')" ${autoBidEnabled ? 'checked' : ''}>
+            <span class="slider-switch"></span>
+          </label>
+          <select class="select-control" style="width:75px; font-size:11px; height:24px; padding:0 4px; background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.12); color:white;" id="autobid-rank-${kw.nccKeywordId}" onchange="saveKeywordAutoBid('${kw.nccKeywordId}')">
+            <option value="1-3" ${autoBidRank === '1-3' ? 'selected' : ''}>1~3위</option>
+            <option value="3-5" ${autoBidRank === '3-5' ? 'selected' : ''}>3~5위</option>
+            <option value="5-10" ${autoBidRank === '5-10' ? 'selected' : ''}>5~10위</option>
+          </select>
+        </div>
+      </td>
       <td>
         <input type="number" class="input-control" value="${bidVal}" step="50" style="width: 90px; text-align: right; font-size:13px; height:32px; padding:0 8px;" id="bid-input-${kw.nccKeywordId}">
       </td>
@@ -1407,6 +1505,31 @@ function renderKeywordsBidTable() {
     tbody.appendChild(tr);
   });
 }
+
+window.saveKeywordAutoBid = async function(keywordId) {
+  const toggle = document.getElementById(`autobid-toggle-${keywordId}`);
+  const rankSelect = document.getElementById(`autobid-rank-${keywordId}`);
+  if (!toggle || !rankSelect) return;
+
+  const enabled = toggle.checked;
+  const targetRank = rankSelect.value;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/naver-ads/autobid-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keywordId, enabled, targetRank })
+    });
+    const data = await res.json();
+    
+    if (!state.autoBidSettings) state.autoBidSettings = {};
+    state.autoBidSettings[keywordId] = { enabled, targetRank };
+    
+    console.log(`[AUTOBID] Saved settings for keyword ${keywordId}: enabled=${enabled}, rank=${targetRank}`);
+  } catch (err) {
+    console.error('Failed to save auto bid settings:', err);
+  }
+};
 
 window.handleBidSelectAllToggle = function() {
   const isChecked = elements.bidSelectAll.checked;

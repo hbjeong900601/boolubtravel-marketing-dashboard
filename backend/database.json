@@ -5,6 +5,7 @@
       "name": "제주도 3박4일 힐링 투어",
       "price": 290000,
       "marginRate": 0.25,
+      "stockStatus": "IN_STOCK",
       "keywords": [
         "제주도 여행",
         "제주도 패키지",
@@ -37,6 +38,7 @@
       "name": "후쿠오카 온천 2박3일",
       "price": 450000,
       "marginRate": 0.2,
+      "stockStatus": "IN_STOCK",
       "keywords": [
         "후쿠오카 여행",
         "후쿠오카 온천",
@@ -66,6 +68,7 @@
       "name": "발리 허니문 5일",
       "price": 1200000,
       "marginRate": 0.3,
+      "stockStatus": "IN_STOCK",
       "keywords": [
         "발리 여행",
         "발리 신혼여행",
@@ -95,6 +98,7 @@
       "name": "오사카 주말 도깨비",
       "price": 350000,
       "marginRate": 0.15,
+      "stockStatus": "IN_STOCK",
       "keywords": [
         "오사카 여행",
         "오사카 패키지",
@@ -124,6 +128,7 @@
       "name": "유럽 일주 9일",
       "price": 3400000,
       "marginRate": 0.18,
+      "stockStatus": "IN_STOCK",
       "keywords": [
         "유럽 패키지",
         "유럽 여행",
