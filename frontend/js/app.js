@@ -2853,27 +2853,43 @@ window.updateCompSelectedCount = function() {
 window.adjustSelectedCompCpc = function(amount) {
   const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
   if (checkedBoxes.length === 0) { alert('조정할 소재를 선택해 주세요.'); return; }
+  let applied = 0;
   checkedBoxes.forEach(cb => {
     const adId = cb.getAttribute('data-ad-id');
-    const input = document.getElementById(`comp-cpc-${adId}`);
+    if (!adId) return;
+    const input = document.getElementById('comp-cpc-' + adId);
     if (input) {
       let val = parseInt(input.value, 10) || 70;
       val = Math.max(70, val + amount);
       input.value = val;
+      applied++;
     }
   });
+  console.log(`adjustSelectedCompCpc: ${applied}/${checkedBoxes.length} inputs updated by ${amount}`);
 };
 
 window.applyBulkCompCpc = function() {
-  const bulkVal = parseInt(elements.compBulkCpcInput.value, 10);
+  const bulkInput = document.getElementById('comp-bulk-cpc-input');
+  if (!bulkInput) { alert('입력 필드를 찾을 수 없습니다.'); return; }
+  const bulkVal = parseInt(bulkInput.value, 10);
   if (!bulkVal || bulkVal < 70) { alert('70원 이상의 올바른 입찰가를 입력해 주세요.'); return; }
   const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
   if (checkedBoxes.length === 0) { alert('적용할 소재를 선택해 주세요.'); return; }
+  let applied = 0;
   checkedBoxes.forEach(cb => {
     const adId = cb.getAttribute('data-ad-id');
-    const input = document.getElementById(`comp-cpc-${adId}`);
-    if (input) input.value = bulkVal;
+    if (!adId) return;
+    const input = document.getElementById('comp-cpc-' + adId);
+    if (input) {
+      input.value = bulkVal;
+      applied++;
+    }
   });
+  if (applied > 0) {
+    alert(`${applied}개 소재에 CPC ₩${bulkVal.toLocaleString()} 일괄 적용 완료! '일괄 네이버 전송' 버튼으로 네이버에 반영하세요.`);
+  } else {
+    alert('적용 가능한 소재가 없습니다. 체크박스를 다시 확인해 주세요.');
+  }
 };
 
 window.saveCompCpcToServer = async function(adId) {
