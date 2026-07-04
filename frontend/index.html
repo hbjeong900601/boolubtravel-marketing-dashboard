@@ -886,6 +886,85 @@
     </div>
   </div>
 
+  <!-- COMPETITIVE DETAIL MODAL -->
+  <div class="modal-overlay" id="comp-detail-modal" style="display:none;">
+    <div class="modal-content" style="max-width:720px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 id="comp-modal-title" style="margin:0; font-size:16px;">상품 경쟁력 상세</h3>
+        <button onclick="closeCompDetailModal()" style="background:none; border:none; color:rgba(255,255,255,0.6); font-size:20px; cursor:pointer; padding:4px;">&times;</button>
+      </div>
+
+      <!-- Product Summary -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+        <div class="card" style="padding:14px;">
+          <div style="font-size:12px; opacity:0.6; margin-bottom:4px;">자사 판매가</div>
+          <div id="comp-modal-our-price" style="font-size:20px; font-weight:700; color:var(--color-naver);">-</div>
+        </div>
+        <div class="card" style="padding:14px;">
+          <div style="font-size:12px; opacity:0.6; margin-bottom:4px;">경쟁사 최저가</div>
+          <div id="comp-modal-comp-price" style="font-size:20px; font-weight:700; color:#ff5252;">-</div>
+        </div>
+      </div>
+
+      <!-- Competitive Status & Strategy -->
+      <div class="card" style="padding:14px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span id="comp-modal-status-badge" style="font-size:14px; font-weight:600;">-</span>
+          <span id="comp-modal-gap" style="font-size:14px; font-weight:600;">-</span>
+        </div>
+        <div id="comp-modal-strategy" style="font-size:13px; opacity:0.8; line-height:1.5;"></div>
+      </div>
+
+      <!-- CPC Control Panel -->
+      <div class="card" style="padding:14px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.1);">
+        <div style="font-size:13px; font-weight:600; margin-bottom:10px;">💰 CPC 입찰가 조정</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <div style="font-size:11px; opacity:0.5; margin-bottom:4px;">현재 CPC</div>
+            <div id="comp-modal-current-cpc" style="font-size:18px; font-weight:700; color:var(--color-secondary);">-</div>
+          </div>
+          <div>
+            <div style="font-size:11px; opacity:0.5; margin-bottom:4px;">추천 CPC</div>
+            <div id="comp-modal-rec-cpc" style="font-size:18px; font-weight:700;">-</div>
+          </div>
+          <div>
+            <div style="font-size:11px; opacity:0.5; margin-bottom:4px;">신규 CPC 입력</div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <input type="number" id="comp-modal-new-cpc" class="input-control" min="70" step="50" style="width:100px; text-align:right; font-size:14px; height:32px; padding:0 8px;">
+              <button class="btn btn-naver btn-sm" style="height:32px;" onclick="saveCompModalCpc()">전송</button>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="adjustCompModalCpc(-100)">-100</button>
+          <button class="btn btn-secondary btn-sm" onclick="adjustCompModalCpc(-50)">-50</button>
+          <button class="btn btn-secondary btn-sm" onclick="adjustCompModalCpc(50)">+50</button>
+          <button class="btn btn-secondary btn-sm" onclick="adjustCompModalCpc(100)">+100</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="applyCompModalRecCpc()">추천 CPC 적용</button>
+        </div>
+      </div>
+
+      <!-- Competitors Table -->
+      <div style="font-size:13px; font-weight:600; margin-bottom:8px;">🏪 경쟁 업체 가격 비교 (<span id="comp-modal-comp-count">0</span>개)</div>
+      <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">순위</th>
+              <th>업체명</th>
+              <th>판매가</th>
+              <th>가격 차이</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody id="comp-modal-competitors-tbody">
+            <tr><td colspan="5" style="text-align:center; opacity:0.5; padding:20px;">데이터 없음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- GLOBAL SYNC LOADING OVERLAY -->
   <div class="sync-overlay" id="global-sync-overlay">
     <div class="sync-spinner"></div>
@@ -893,6 +972,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=4.0"></script>
+  <script src="js/app.js?v=4.1"></script>
 </body>
 </html>

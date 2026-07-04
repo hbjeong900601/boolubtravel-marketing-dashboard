@@ -2590,11 +2590,144 @@ function renderCompetitiveTable() {
           <button class="btn btn-naver btn-sm" style="padding:2px 5px; font-size:10px; height:24px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adgroupId}')">전송</button>
         </div>
       </td>
-      <td><button class="btn-detail-action" onclick="navigateToShoppingAd('${item.campaignId}','${item.adgroupId}','${item.adId}')">상세</button></td>
+      <td style="text-align:center;"><button class="btn-detail-action" onclick="openCompDetailModal(${idx})" style="font-size:11px; padding:4px 10px;">상세</button></td>
     </tr>`;
   }).join('');
 }
 
+// --- Competitive Detail Modal ---
+
+let compModalCurrentItem = null;
+
+window.openCompDetailModal = async function(idx) {
+  const filter = elements.compStatusFilter.value;
+  const sort = elements.compSortSelect.value;
+  let data = [...state.competitiveData];
+  if (filter !== 'all') data = data.filter(d => d.status === filter);
+  switch (sort) {
+    case 'gap-asc': data.sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity)); break;
+    case 'gap-desc': data.sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)); break;
+    case 'competitors-desc': data.sort((a, b) => b.competitorCount - a.competitorCount); break;
+    case 'name-asc': data.sort((a, b) => a.adName.localeCompare(b.adName)); break;
+  }
+  const item = data[idx];
+  if (!item) return;
+  compModalCurrentItem = item;
+
+  const modal = document.getElementById('comp-detail-modal');
+  const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
+  const rec = getRecommendedCpc(item);
+
+  document.getElementById('comp-modal-title').innerText = item.adName;
+  document.getElementById('comp-modal-our-price').innerText = '₩' + item.price.toLocaleString();
+  document.getElementById('comp-modal-comp-price').innerText = item.minCompPrice !== null ? '₩' + item.minCompPrice.toLocaleString() : '경쟁사 없음';
+  document.getElementById('comp-modal-comp-price').style.color = item.gap !== null && item.gap <= 0 ? '#00e676' : '#ff5252';
+  document.getElementById('comp-modal-status-badge').innerHTML = `<span class="comp-badge comp-badge-${item.status}">${badgeLabels[item.status]}</span>`;
+  
+  let gapText = item.gap === null ? '-' : item.gap > 0 ? `+₩${item.gap.toLocaleString()} (자사가 더 비쌈)` : item.gap < 0 ? `-₩${Math.abs(item.gap).toLocaleString()} (자사가 더 저렴)` : '₩0 (동일가)';
+  document.getElementById('comp-modal-gap').innerText = gapText;
+
+  const strategy = getCompetitiveStrategy(item.status);
+  document.getElementById('comp-modal-strategy').innerHTML = `<strong>${strategy.emoji} ${strategy.label}</strong> — ${rec.tip}`;
+
+  const currentCpc = item.currentCpc || 0;
+  document.getElementById('comp-modal-current-cpc').innerText = currentCpc > 0 ? '₩' + currentCpc.toLocaleString() : '-';
+  document.getElementById('comp-modal-rec-cpc').innerHTML = `<span style="color:${rec.color};">₩${rec.value.toLocaleString()} <span style="font-size:11px;">${rec.label}</span></span>`;
+  document.getElementById('comp-modal-new-cpc').value = rec.value || currentCpc;
+
+  // Show modal first
+  modal.style.display = 'flex';
+
+  // Fetch real-time competitors
+  const tbody = document.getElementById('comp-modal-competitors-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.5; padding:20px;">경쟁사 데이터 실시간 조회 중...</td></tr>';
+  document.getElementById('comp-modal-comp-count').innerText = '...';
+
+  try {
+    const res = await resilientFetch(`/api/crawler/match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: item.adId, keyword: item.adName, price: item.price, catalogId: '' })
+    });
+    const crawlData = await res.json();
+    const competitors = (crawlData.product?.competitors || []).filter(c => c.price > 0);
+    
+    document.getElementById('comp-modal-comp-count').innerText = competitors.length;
+
+    if (competitors.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.5; padding:20px;">경쟁 업체 데이터가 없습니다.</td></tr>';
+    } else {
+      competitors.sort((a, b) => a.price - b.price);
+      tbody.innerHTML = competitors.map((c, i) => {
+        const diff = item.price - c.price;
+        const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
+        const statusLabel = isOwn ? '<span style="color:#a78bfa; font-weight:600;">자사</span>' : diff > 0 ? '<span style="color:#ff5252;">열위</span>' : diff < 0 ? '<span style="color:#00e676;">우위</span>' : '<span style="color:#ffc107;">동일</span>';
+        const diffHtml = diff > 0 ? `<span class="gap-positive">+₩${diff.toLocaleString()}</span>` : diff < 0 ? `<span class="gap-negative">-₩${Math.abs(diff).toLocaleString()}</span>` : '<span class="gap-zero">₩0</span>';
+        return `<tr style="${isOwn ? 'background:rgba(167,139,250,0.1);' : ''}">
+          <td style="text-align:center; font-weight:600;">${i + 1}</td>
+          <td style="font-size:12px;${isOwn ? ' color:#a78bfa; font-weight:600;' : ''}">${c.name}${isOwn ? ' ⭐' : ''}</td>
+          <td style="font-weight:600;">₩${c.price.toLocaleString()}</td>
+          <td>${diffHtml}</td>
+          <td>${statusLabel}</td>
+        </tr>`;
+      }).join('');
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#ff5252; padding:20px;">조회 실패: ${err.message}</td></tr>`;
+  }
+};
+
+window.closeCompDetailModal = function() {
+  document.getElementById('comp-detail-modal').style.display = 'none';
+  compModalCurrentItem = null;
+};
+
+window.adjustCompModalCpc = function(amount) {
+  const input = document.getElementById('comp-modal-new-cpc');
+  let val = parseInt(input.value, 10) || 70;
+  val = Math.max(70, val + amount);
+  input.value = val;
+};
+
+window.applyCompModalRecCpc = function() {
+  if (!compModalCurrentItem) return;
+  const rec = getRecommendedCpc(compModalCurrentItem);
+  document.getElementById('comp-modal-new-cpc').value = rec.value;
+};
+
+window.saveCompModalCpc = async function() {
+  if (!compModalCurrentItem) return;
+  const bidAmt = parseInt(document.getElementById('comp-modal-new-cpc').value, 10);
+  if (!bidAmt || bidAmt < 70) { alert('70원 이상의 입찰가를 입력해 주세요.'); return; }
+
+  showLoader('네이버 광고 서버에 CPC 입찰가 전송 중...');
+  try {
+    const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adgroupId: compModalCurrentItem.adgroupId, bidAmt })
+    });
+    const result = await res.json();
+    hideLoader();
+    if (result.nccAdgroupId || result.result) {
+      state.competitiveData.forEach(d => { if (d.adgroupId === compModalCurrentItem.adgroupId) d.currentCpc = bidAmt; });
+      document.getElementById('comp-modal-current-cpc').innerText = '₩' + bidAmt.toLocaleString();
+      const tableInput = document.getElementById(`comp-cpc-${compModalCurrentItem.adgroupId}`);
+      if (tableInput) tableInput.value = bidAmt;
+      alert(`CPC ₩${bidAmt.toLocaleString()} 입찰가가 네이버에 동기화되었습니다!`);
+    } else {
+      alert('입찰가 전송 실패: ' + JSON.stringify(result));
+    }
+  } catch (err) {
+    hideLoader();
+    alert('연동 실패: ' + err.message);
+  }
+};
+
+// Close modal on overlay click
+document.getElementById('comp-detail-modal')?.addEventListener('click', function(e) {
+  if (e.target === this) closeCompDetailModal();
+});
 
 // --- Competitive Table Bulk Management Functions ---
 
