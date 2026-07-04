@@ -745,6 +745,7 @@ window.toggleCampaignActive = function(campaignId, active) {
 
 function renderProductsTable() {
   const tbody = elements.compareProductTableBody;
+  if (!tbody) return;
   tbody.innerHTML = '';
 
   if (state.products.length === 0) {
@@ -866,44 +867,79 @@ function selectProductForStrategy(productId) {
   renderProductsTable(); // updates highlight
 
   // Display detail strategy pane
-  elements.strategyDetailsCard.style.display = 'block';
-  elements.strategyProductTitle.innerText = `${product.name} 가격 분포`;
+  if (elements.strategyDetailsCard) {
+    elements.strategyDetailsCard.style.display = 'block';
+  }
+  if (elements.strategyProductTitle) {
+    elements.strategyProductTitle.innerText = `${product.name} 가격 분포`;
+  }
 
   // Update Status Badge
   const compStatus = isCompetitive(product);
   const diff = getMinPriceDiff(product);
   
   if (compStatus === 'BEST') {
-    elements.strategyPriceBadge.className = 'badge badge-success';
-    elements.strategyPriceBadge.innerText = `가격 우위 (타사 대비 -₩${Math.abs(diff).toLocaleString()})`;
-    
-    elements.strategyRecommendationTitle.innerText = '공격적 입찰 권장 (Rank 1-3위 선점)';
-    elements.strategyRecommendationDesc = '타사 대비 가격 메리트가 확실해 유입 시 높은 전환을 기록할 상품입니다. 광고비 입찰액을 적극 상향해 트래픽을 몰아오는 것이 정답입니다.';
-    elements.strategyRecommendedCpc.innerText = '₩1,400 원';
+    if (elements.strategyPriceBadge) {
+      elements.strategyPriceBadge.className = 'badge badge-success';
+      elements.strategyPriceBadge.innerText = `가격 우위 (타사 대비 -₩${Math.abs(diff).toLocaleString()})`;
+    }
+    if (elements.strategyRecommendationTitle) {
+      elements.strategyRecommendationTitle.innerText = '공격적 입찰 권장 (Rank 1-3위 선점)';
+    }
+    if (elements.strategyRecommendationDesc) {
+      elements.strategyRecommendationDesc = '타사 대비 가격 메리트가 확실해 유입 시 높은 전환을 기록할 상품입니다. 광고비 입찰액을 적극 상향해 트래픽을 몰아오는 것이 정답입니다.';
+    }
+    if (elements.strategyRecommendedCpc) {
+      elements.strategyRecommendedCpc.innerText = '₩1,400 원';
+    }
   } else if (compStatus === 'HIGH') {
-    elements.strategyPriceBadge.className = 'badge badge-danger';
-    elements.strategyPriceBadge.innerText = `가격 경쟁력 약세 (타사 대비 +₩${diff.toLocaleString()})`;
-    
-    elements.strategyRecommendationTitle.innerText = '방어형 입찰 권장 (Rank 5-10위 또는 브랜드 광고)';
-    elements.strategyRecommendationDesc = '상품 단가가 다소 비싸 일반 검색 노출 시 단순 예산 소진액만 커지고 이탈률이 증가할 수 있습니다. 핵심 키워드는 비중을 줄이고 자사 브랜드 키워드 위주로 전환 유도를 지향하세요.';
-    elements.strategyRecommendedCpc.innerText = '₩450 원';
+    if (elements.strategyPriceBadge) {
+      elements.strategyPriceBadge.className = 'badge badge-danger';
+      elements.strategyPriceBadge.innerText = `가격 경쟁력 약세 (타사 대비 +₩${diff.toLocaleString()})`;
+    }
+    if (elements.strategyRecommendationTitle) {
+      elements.strategyRecommendationTitle.innerText = '방어형 입찰 권장 (Rank 5-10위 또는 브랜드 광고)';
+    }
+    if (elements.strategyRecommendationDesc) {
+      elements.strategyRecommendationDesc = '상품 단가가 다소 비싸 일반 검색 노출 시 단순 예산 소진액만 커지고 이탈률이 증가할 수 있습니다. 핵심 키워드는 비중을 줄이고 자사 브랜드 키워드 위주로 전환 유도를 지향하세요.';
+    }
+    if (elements.strategyRecommendedCpc) {
+      elements.strategyRecommendedCpc.innerText = '₩450 원';
+    }
   } else if (compStatus === 'NEUTRAL') {
-    elements.strategyPriceBadge.className = 'badge badge-warning';
-    elements.strategyPriceBadge.innerText = `유사 가격대 매칭 (편차 ₩${Math.abs(diff).toLocaleString()})`;
-    
-    elements.strategyRecommendationTitle.innerText = '균형형 입찰 권장 (Rank 3-5위)';
-    elements.strategyRecommendationDesc = '가격 조건이 비슷하므로 광고 상세 설명(무료 취소 보장, 단독 얼리버드 등)의 혜택 문구를 가미해 매력도를 채워 입찰하길 권합니다.';
-    elements.strategyRecommendedCpc.innerText = '₩850 원';
+    if (elements.strategyPriceBadge) {
+      elements.strategyPriceBadge.className = 'badge badge-warning';
+      elements.strategyPriceBadge.innerText = `유사 가격대 매칭 (편차 ₩${Math.abs(diff).toLocaleString()})`;
+    }
+    if (elements.strategyRecommendationTitle) {
+      elements.strategyRecommendationTitle.innerText = '균형형 입찰 권장 (Rank 3-5위)';
+    }
+    if (elements.strategyRecommendationDesc) {
+      elements.strategyRecommendationDesc = '가격 조건이 비슷하므로 광고 상세 설명(무료 취소 보장, 단독 얼리버드 등)의 혜택 문구를 가미해 매력도를 채워 입찰하길 권합니다.';
+    }
+    if (elements.strategyRecommendedCpc) {
+      elements.strategyRecommendedCpc.innerText = '₩850 원';
+    }
   } else {
-    elements.strategyPriceBadge.className = 'badge badge-secondary';
-    elements.strategyPriceBadge.innerText = '타사 가격 미분석 상태';
-    elements.strategyRecommendationTitle.innerText = '파싱 매칭 진행 필요';
-    elements.strategyRecommendationDesc = '우측의 [파싱 매칭] 버튼을 누르면 실시간 네이버 쇼핑 비교 정보 분석을 통하여 광고 비즈니스 코치가 제공됩니다.';
-    elements.strategyRecommendedCpc.innerText = '- 원';
+    if (elements.strategyPriceBadge) {
+      elements.strategyPriceBadge.className = 'badge badge-secondary';
+      elements.strategyPriceBadge.innerText = '타사 가격 미분석 상태';
+    }
+    if (elements.strategyRecommendationTitle) {
+      elements.strategyRecommendationTitle.innerText = '파싱 매칭 진행 필요';
+    }
+    if (elements.strategyRecommendationDesc) {
+      elements.strategyRecommendationDesc = '우측의 [파싱 매칭] 버튼을 누르면 실시간 네이버 쇼핑 비교 정보 분석을 통하여 광고 비즈니스 코치가 제공됩니다.';
+    }
+    if (elements.strategyRecommendedCpc) {
+      elements.strategyRecommendedCpc.innerText = '- 원';
+    }
   }
 
   // Draw Price Bar Chart
-  drawCompetitorPriceChart(product);
+  if (document.getElementById('competitor-price-chart')) {
+    drawCompetitorPriceChart(product);
+  }
 }
 
 function drawCompetitorPriceChart(product) {
