@@ -617,16 +617,34 @@
         
         <!-- Scan Controls -->
         <div class="competitive-scan-bar">
-          <div class="scan-info">
-            <span class="scan-label">마지막 스캔:</span>
-            <span id="comp-last-scan-time">아직 스캔하지 않음</span>
+          <div class="scan-info-group">
+            <div class="scan-info">
+              <span class="scan-label">마지막 스캔:</span>
+              <span id="comp-last-scan-time">아직 스캔하지 않음</span>
+            </div>
+            <div class="scan-info scan-next-info">
+              <span class="scan-label">다음 자동 스캔:</span>
+              <span id="comp-next-scan-time">-</span>
+            </div>
+            <div class="scan-schedule-badge" id="comp-auto-scan-badge">
+              <span class="auto-scan-dot"></span>
+              자동 갱신 활성 (6시간 간격)
+            </div>
           </div>
-          <button class="btn btn-primary btn-scan" id="comp-scan-all-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            전 상품 일괄 스캔
-          </button>
+          <div class="scan-btn-group">
+            <button class="btn btn-secondary btn-export" id="comp-export-csv-btn" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" style="width:14px;height:14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              CSV 내보내기
+            </button>
+            <button class="btn btn-primary btn-scan" id="comp-scan-all-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" style="width:16px;height:16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              전 상품 일괄 스캔
+            </button>
+          </div>
         </div>
 
         <!-- Scan Progress Bar -->
@@ -646,7 +664,12 @@
         </div>
 
         <!-- KPI Cards -->
-        <div class="kpi-grid kpi-grid-4">
+        <div class="kpi-grid kpi-grid-5">
+          <div class="kpi-card">
+            <div class="kpi-label">전체 스캔 상품</div>
+            <div class="kpi-value" id="comp-kpi-total">0개</div>
+            <div class="kpi-sub">쇼핑검색 광고 소재</div>
+          </div>
           <div class="kpi-card">
             <div class="kpi-label">최저가 상품</div>
             <div class="kpi-value" id="comp-kpi-lowest" style="color: #00e676;">0개</div>
@@ -699,6 +722,7 @@
                     <th>자사 판매가</th>
                     <th>경쟁사 최저가</th>
                     <th>가격 차이</th>
+                    <th>변동</th>
                     <th>경쟁력 상태</th>
                     <th>최저가 업체</th>
                     <th>경쟁사 수</th>
@@ -707,7 +731,7 @@
                   </tr>
                 </thead>
                 <tbody id="comp-table-tbody">
-                  <tr><td colspan="9" style="text-align:center; opacity:0.5; padding:40px;">상단의 [전 상품 일괄 스캔] 버튼을 눌러 분석을 시작하세요.</td></tr>
+                  <tr><td colspan="10" style="text-align:center; opacity:0.5; padding:40px;">데이터를 불러오는 중... 잠시만 기다려주세요.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -868,6 +892,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=2.7"></script>
+  <script src="js/app.js?v=2.8"></script>
 </body>
 </html>
