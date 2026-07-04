@@ -113,31 +113,17 @@ body {
   padding: 24px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.logo-icon {
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, var(--color-naver), var(--color-secondary));
-  border-radius: var(--border-radius-sm);
-  display: flex;
-  align-items: center;
   justify-content: center;
-  font-weight: 800;
-  color: white;
-  font-size: 18px;
-  box-shadow: 0 0 15px rgba(3, 199, 90, 0.4);
+  border-bottom: 1px solid var(--border-color);
+  min-height: 81px; /* Maintain consistent height */
+  box-sizing: border-box;
 }
 
-.logo-text {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  background: linear-gradient(to right, #ffffff, #9ca3af);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.sidebar-logo-img {
+  max-width: 100%;
+  max-height: 38px;
+  object-fit: contain;
+  display: block;
 }
 
 .logo-text span {
