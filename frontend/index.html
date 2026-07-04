@@ -334,12 +334,12 @@
       <section class="tab-content" id="tab-bid-manager">
         <div class="card" style="margin-bottom: 24px;">
           <div class="card-header">
-            <h3 class="card-title">네이버 키워드 입찰 세부 제어</h3>
+            <h3 class="card-title">네이버 파워링크 키워드 입찰 관리</h3>
           </div>
           
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
             <div class="form-group">
-              <label>1단계: 광고 캠페인 선택</label>
+              <label>1단계: 파워링크 캠페인 선택 (Type: WEB_SITE / SEARCH)</label>
               <select class="select-control" id="bid-campaign-select">
                 <option value="">캠페인을 선택하세요</option>
                 <!-- Filled via JS -->
@@ -354,13 +354,33 @@
             </div>
           </div>
 
+          <!-- Bulk Adjust Controls (Initially Hidden) -->
+          <div class="bid-bulk-bar" id="bid-bulk-bar" style="display: none; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; font-size: 13px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="bid-select-all" style="cursor:pointer; width:15px; height:15px;">
+              <span id="bid-select-count" style="font-weight:600; color:var(--color-secondary);">0개 선택됨</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="color:rgba(255,255,255,0.6);">선택 키워드 입찰가 일괄 조정:</span>
+              <button class="btn btn-secondary btn-sm" onclick="adjustSelectedBids(-50)">-50원</button>
+              <button class="btn btn-secondary btn-sm" onclick="adjustSelectedBids(50)">+50원</button>
+              <input type="number" class="input-control" id="bid-bulk-input" placeholder="직접 입력" style="width:90px; text-align:right; font-size:12px; height:28px; padding:0 8px;">
+              <button class="btn btn-naver btn-sm" style="height:28px;" onclick="applyBulkBidAmount()">일괄 적용</button>
+              <button class="btn btn-primary btn-sm" style="height:28px; background-color:#4f46e5; border-color:#4f46e5;" onclick="saveBulkBidsToServer()">일괄 네이버 전송</button>
+            </div>
+          </div>
+
           <div class="table-container" style="display: none;" id="bid-keywords-container">
             <table>
               <thead>
                 <tr>
+                  <th style="width: 40px; text-align: center;">선택</th>
                   <th>키워드 명</th>
-                  <th>현재 설정 입찰가 (CPC)</th>
+                  <th>월간 PC 검색량</th>
+                  <th>월간 모바일 검색량</th>
+                  <th>현재 설정 입찰가</th>
                   <th>상태</th>
+                  <th>입찰 안내 가이드</th>
                   <th>신규 입찰가 입력</th>
                   <th>입찰 조절</th>
                   <th>반영하기</th>
@@ -373,7 +393,7 @@
           </div>
           
           <div id="bid-no-data-msg" style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px;">
-            캠페인과 광고 그룹을 선택하면 등록된 키워드 입찰 정보를 불러옵니다.
+            파워링크 캠페인과 광고 그룹을 선택하면 등록된 키워드 및 실시간 네이버 검색 지표 데이터를 불러옵니다.
           </div>
         </div>
       </section>
@@ -828,6 +848,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=3.3"></script>
+  <script src="js/app.js?v=3.4"></script>
 </body>
 </html>

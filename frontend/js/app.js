@@ -99,6 +99,10 @@ const elements = {
   bidKeywordsContainer: document.getElementById('bid-keywords-container'),
   bidKeywordsTbody: document.getElementById('bid-keywords-tbody'),
   bidNoDataMsg: document.getElementById('bid-no-data-msg'),
+  bidBulkBar: document.getElementById('bid-bulk-bar'),
+  bidSelectAll: document.getElementById('bid-select-all'),
+  bidSelectCount: document.getElementById('bid-select-count'),
+  bidBulkInput: document.getElementById('bid-bulk-input'),
 
   // Tab 5: Settings
   apiSettingsForm: document.getElementById('api-settings-form'),
@@ -250,6 +254,7 @@ function setupEventListeners() {
   // Bid Manager Selections
   elements.bidCampaignSelect.addEventListener('change', handleCampaignSelection);
   elements.bidAdgroupSelect.addEventListener('change', handleAdgroupSelection);
+  elements.bidSelectAll.addEventListener('change', handleBidSelectAllToggle);
 
   // Shopping Ads Optimizer Selections
   elements.shopCampaignSelect.addEventListener('change', handleShoppingCampaignSelection);
@@ -1217,14 +1222,17 @@ function runSimulation() {
 }
 
 // -------------------------------------------------------------
-// TAB 4: AD BID MANAGER
+// TAB 4: AD BID MANAGER (Power Link Optimized)
 // -------------------------------------------------------------
 
 function populateCampaignDropdown() {
   const select = elements.bidCampaignSelect;
   select.innerHTML = '<option value="">캠페인을 선택하세요</option>';
   
-  state.campaigns.forEach(c => {
+  // Filter only Power Link (WEB_SITE / SEARCH) campaigns
+  const powerLinkCampaigns = state.campaigns.filter(c => c.campaignTp === 'WEB_SITE' || c.campaignTp === 'SEARCH');
+  
+  powerLinkCampaigns.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c.nccCampaignId;
     opt.innerText = c.name;
@@ -1234,6 +1242,7 @@ function populateCampaignDropdown() {
   elements.bidAdgroupSelect.disabled = true;
   elements.bidAdgroupSelect.innerHTML = '<option value="">광고 그룹을 선택하세요</option>';
   elements.bidKeywordsContainer.style.display = 'none';
+  elements.bidBulkBar.style.display = 'none';
   elements.bidNoDataMsg.style.display = 'block';
 }
 
@@ -1264,6 +1273,7 @@ async function handleCampaignSelection() {
     });
 
     elements.bidKeywordsContainer.style.display = 'none';
+    elements.bidBulkBar.style.display = 'none';
     elements.bidNoDataMsg.style.display = 'block';
     elements.bidNoDataMsg.innerText = '광고 그룹을 마저 선택하시면 키워드 입찰 목록이 조회됩니다.';
 
@@ -1277,24 +1287,58 @@ async function handleAdgroupSelection() {
   const adgroupId = elements.bidAdgroupSelect.value;
   if (!adgroupId) {
     elements.bidKeywordsContainer.style.display = 'none';
+    elements.bidBulkBar.style.display = 'none';
     elements.bidNoDataMsg.style.display = 'block';
     return;
   }
 
-  showLoader('키워드 입찰 목록을 연동하는 중...');
+  showLoader('키워드 입찰 정보 및 실시간 검색량 데이터 연동 중...');
   
   try {
+    // 1. Fetch keywords in ad group
     const res = await fetch(`${API_BASE}/api/naver-ads/keywords?adgroupId=${adgroupId}`);
     state.keywords = await res.json();
+    
+    // 2. Fetch keyword monthly search stats from Naver API in batches of 5
+    state.keywordStats = {};
+    if (state.keywords.length > 0) {
+      const kwNames = state.keywords.map(k => k.keyword);
+      const batches = [];
+      for (let i = 0; i < kwNames.length; i += 5) {
+        batches.push(kwNames.slice(i, i + 5));
+      }
+      
+      for (const batch of batches) {
+        try {
+          const query = batch.join(',');
+          const infoRes = await fetch(`${API_BASE}/api/naver-ads/keyword-info?keywords=${encodeURIComponent(query)}`);
+          const infoData = await infoRes.json();
+          if (infoData.keywordList) {
+            infoData.keywordList.forEach(stat => {
+              state.keywordStats[stat.relKeyword] = stat;
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to fetch keyword stats batch:', e);
+        }
+      }
+    }
     
     hideLoader();
 
     if (state.keywords.length > 0) {
       elements.bidNoDataMsg.style.display = 'none';
       elements.bidKeywordsContainer.style.display = 'block';
+      elements.bidBulkBar.style.display = 'flex';
+      
+      // Reset Select All state
+      elements.bidSelectAll.checked = false;
+      updateSelectedBidCount();
+      
       renderKeywordsBidTable();
     } else {
       elements.bidKeywordsContainer.style.display = 'none';
+      elements.bidBulkBar.style.display = 'none';
       elements.bidNoDataMsg.style.display = 'block';
       elements.bidNoDataMsg.innerText = '이 광고 그룹에는 등록된 키워드가 없습니다.';
     }
@@ -1314,13 +1358,39 @@ function renderKeywordsBidTable() {
     tr.id = `kwd-row-${kw.nccKeywordId}`;
 
     const bidVal = kw.bidAmt || 800;
+    
+    // Retrieve keyword stats
+    const stats = state.keywordStats[kw.keyword] || {};
+    const pcVol = typeof stats.monthlyPcQcCnt === 'number' ? stats.monthlyPcQcCnt : 0;
+    const mobVol = typeof stats.monthlyMobileQcCnt === 'number' ? stats.monthlyMobileQcCnt : 0;
+    const totalVol = pcVol + mobVol;
+
+    // Create Bid Guide Badge
+    let guideBadge = '<span class="badge badge-secondary" style="background:#4b5563;">⚪조회수 부족</span>';
+    if (totalVol > 10000) {
+      guideBadge = '<span class="badge badge-danger" style="background:#ff5252; color:white; font-weight:600;">🔴고노출 키워드</span>';
+    } else if (totalVol > 1000) {
+      guideBadge = '<span class="badge badge-warning" style="background:#ffc107; color:black; font-weight:600;">🟡중간 키워드</span>';
+    } else if (totalVol > 0) {
+      guideBadge = '<span class="badge badge-success" style="background:#00e676; color:black; font-weight:600;">🔵세부 키워드</span>';
+    }
+
+    const isActive = kw.useYn !== undefined ? kw.useYn === 'Y' : kw.userLock === false;
+    const statusText = isActive ? '노출 가능' : '일시 중지';
+    const statusClass = isActive ? 'badge-success' : 'badge-secondary';
 
     tr.innerHTML = `
+      <td style="text-align: center;">
+        <input type="checkbox" class="bid-kw-checkbox" data-id="${kw.nccKeywordId}" onchange="updateSelectedBidCount()" style="cursor:pointer; width:15px; height:15px;">
+      </td>
       <td style="font-weight: 700; color: white;">${kw.keyword}</td>
+      <td style="color: rgba(255,255,255,0.7);">${pcVol > 0 ? pcVol.toLocaleString() : '-'}</td>
+      <td style="color: rgba(255,255,255,0.7);">${mobVol > 0 ? mobVol.toLocaleString() : '-'}</td>
       <td style="color: var(--color-secondary); font-weight: 600;">₩${bidVal.toLocaleString()}</td>
-      <td><span class="badge ${kw.useYn === 'Y' ? 'badge-success' : 'badge-secondary'}">${kw.status === 'ELIGIBLE' ? '노출 가능' : kw.status}</span></td>
+      <td><span class="badge ${statusClass}">${statusText}</span></td>
+      <td>${guideBadge}</td>
       <td>
-        <input type="number" class="input-control" value="${bidVal}" step="50" style="width: 100px; text-align: right;" id="bid-input-${kw.nccKeywordId}">
+        <input type="number" class="input-control" value="${bidVal}" step="50" style="width: 90px; text-align: right; font-size:13px; height:32px; padding:0 8px;" id="bid-input-${kw.nccKeywordId}">
       </td>
       <td>
         <div style="display: flex; gap: 4px;">
@@ -1338,11 +1408,110 @@ function renderKeywordsBidTable() {
   });
 }
 
+window.handleBidSelectAllToggle = function() {
+  const isChecked = elements.bidSelectAll.checked;
+  const checkboxes = document.querySelectorAll('.bid-kw-checkbox');
+  checkboxes.forEach(cb => {
+    cb.checked = isChecked;
+  });
+  updateSelectedBidCount();
+};
+
+window.updateSelectedBidCount = function() {
+  const checked = document.querySelectorAll('.bid-kw-checkbox:checked').length;
+  elements.bidSelectCount.innerText = `${checked}개 선택됨`;
+};
+
+window.adjustSelectedBids = function(amount) {
+  const checkedBoxes = document.querySelectorAll('.bid-kw-checkbox:checked');
+  if (checkedBoxes.length === 0) {
+    alert('조정할 키워드를 선택해 주세요.');
+    return;
+  }
+  checkedBoxes.forEach(cb => {
+    const kwId = cb.getAttribute('data-id');
+    const input = document.getElementById(`bid-input-${kwId}`);
+    if (input) {
+      let val = parseInt(input.value, 10) || 150;
+      val = Math.max(150, val + amount);
+      input.value = val;
+    }
+  });
+};
+
+window.applyBulkBidAmount = function() {
+  const bulkVal = parseInt(elements.bidBulkInput.value, 10);
+  if (!bulkVal || bulkVal < 150) {
+    alert('150원 이상의 올바른 일괄 입찰가를 입력해 주세요.');
+    return;
+  }
+  const checkedBoxes = document.querySelectorAll('.bid-kw-checkbox:checked');
+  if (checkedBoxes.length === 0) {
+    alert('적용할 키워드를 선택해 주세요.');
+    return;
+  }
+  checkedBoxes.forEach(cb => {
+    const kwId = cb.getAttribute('data-id');
+    const input = document.getElementById(`bid-input-${kwId}`);
+    if (input) {
+      input.value = bulkVal;
+    }
+  });
+};
+
+window.saveBulkBidsToServer = async function() {
+  const checkedBoxes = document.querySelectorAll('.bid-kw-checkbox:checked');
+  if (checkedBoxes.length === 0) {
+    alert('네이버 광고 서버에 전송할 키워드를 선택해 주세요.');
+    return;
+  }
+  
+  const updates = [];
+  checkedBoxes.forEach(cb => {
+    const kwId = cb.getAttribute('data-id');
+    const input = document.getElementById(`bid-input-${kwId}`);
+    if (input) {
+      updates.push({ keywordId: kwId, bidAmt: parseInt(input.value, 10) });
+    }
+  });
+
+  showLoader(`총 ${updates.length}개 선택 키워드 일괄 네이버 API 전송 중...`);
+  
+  let successCount = 0;
+  for (const item of updates) {
+    try {
+      const res = await fetch(`${API_BASE}/api/naver-ads/adjust-bid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywordId: item.keywordId, bidAmt: item.bidAmt })
+      });
+      const result = await res.json();
+      if (result.result || result.nccKeywordId) {
+        successCount++;
+        // Update local state
+        const kw = state.keywords.find(k => k.nccKeywordId === item.keywordId);
+        if (kw) kw.bidAmt = item.bidAmt;
+      }
+    } catch (e) {
+      console.warn(`Bulk update failed for ${item.keywordId}:`, e);
+    }
+  }
+
+  hideLoader();
+  renderKeywordsBidTable();
+  
+  // Uncheck all
+  elements.bidSelectAll.checked = false;
+  updateSelectedBidCount();
+
+  alert(`일괄 입찰가 적용이 완료되었습니다! (전송 성공: ${successCount} / ${updates.length}개)`);
+};
+
 window.adjustLocalBidInput = function(keywordId, amount) {
   const input = document.getElementById(`bid-input-${keywordId}`);
   if (input) {
     let val = parseInt(input.value, 10) || 150;
-    val = Math.max(150, val + amount); // Naver min bid is 150 won
+    val = Math.max(150, val + amount);
     input.value = val;
   }
 };
@@ -1366,7 +1535,6 @@ window.saveKeywordBid = async function(keywordId) {
     hideLoader();
 
     if (result.result || result.nccKeywordId) {
-      // Success. Update local state
       const kw = state.keywords.find(k => k.nccKeywordId === keywordId);
       if (kw) kw.bidAmt = bidAmt;
       
