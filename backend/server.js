@@ -254,6 +254,20 @@ app.post('/api/naver-ads/adjust-bid', async (req, res) => {
   }
 });
 
+// Adjust individual ad bid (per-product CPC for shopping ads)
+app.post('/api/naver-ads/adjust-ad-bid', async (req, res) => {
+  const { adId, bidAmt } = req.body;
+  if (!adId || bidAmt === undefined) {
+    return res.status(400).json({ error: 'Ad ID and bid amount are required.' });
+  }
+  try {
+    const result = await adApi.adjustAdBid(adId, parseInt(bidAmt, 10));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Retrieve monthly search query statistics and average CPC (Naver Keyword Tool)
 app.get('/api/naver-ads/keyword-info', async (req, res) => {
   const { keywords } = req.query;

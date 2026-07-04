@@ -2528,7 +2528,7 @@ async function runGroupCompetitiveScan() {
       const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
       const price = parseInt(ad.referenceData?.price, 10) || parseInt(ad.referenceData?.lowPrice, 10) || parseInt(ad.adAttr?.price, 10) || 0;
       if (adName && price > 0) {
-        allAds.push({ adId: ad.nccAdId, adName, price, campaignId, campaignName, adgroupId, adgroupName, referenceData: ad.referenceData });
+        allAds.push({ adId: ad.nccAdId, adName, price, campaignId, campaignName, adgroupId, adgroupName, referenceData: ad.referenceData, adBidAmt: ad.adAttr?.bidAmt || 0, useGroupBidAmt: ad.adAttr?.useGroupBidAmt });
       }
     }
 
@@ -2552,7 +2552,7 @@ async function runGroupCompetitiveScan() {
         const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
         const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
         const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
-        state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: groupBidAmt });
+        state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: (ad.useGroupBidAmt ? groupBidAmt : ad.adBidAmt) || groupBidAmt });
       } catch (err) { console.warn(`Scan failed for ${ad.adName}:`, err.message); }
       if (i < total - 1) await new Promise(r => setTimeout(r, 300));
     }
@@ -2626,7 +2626,7 @@ function renderCompetitiveTable() {
 
     return `<tr>
       <td style="text-align:center;">
-        <input type="checkbox" class="comp-kw-checkbox" data-idx="${idx}" data-adgroup-id="${item.adgroupId}" onchange="updateCompSelectedCount()" style="cursor:pointer; width:15px; height:15px;">
+        <input type="checkbox" class="comp-kw-checkbox" data-idx="${idx}" data-ad-id="${item.adId}" onchange="updateCompSelectedCount()" style="cursor:pointer; width:15px; height:15px;">
       </td>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.adName}">${item.adName}</td>
       <td>₩${item.price.toLocaleString()}</td>
@@ -2645,9 +2645,9 @@ function renderCompetitiveTable() {
       <td>
         <div style="display:flex; align-items:center; gap:3px;">
           <input type="number" class="input-control comp-cpc-input" value="${rec.value || currentCpc}" step="50" min="70"
-            data-adgroup-id="${item.adgroupId}" id="comp-cpc-${item.adgroupId}"
+            data-ad-id="${item.adId}" id="comp-cpc-${item.adId}"
             style="width:75px; text-align:right; font-size:12px; height:26px; padding:0 5px;">
-          <button class="btn btn-naver btn-sm" style="padding:2px 5px; font-size:10px; height:24px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adgroupId}')">전송</button>
+          <button class="btn btn-naver btn-sm" style="padding:2px 5px; font-size:10px; height:24px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adId}')">전송</button>
         </div>
       </td>
       <td style="text-align:center;"><button class="btn-detail-action" onclick="openCompDetailModal(${idx})" style="font-size:11px; padding:4px 10px;">상세</button></td>
@@ -2762,19 +2762,19 @@ window.saveCompModalCpc = async function() {
 
   showLoader('네이버 광고 서버에 CPC 입찰가 전송 중...');
   try {
-    const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+    const res = await resilientFetch(`/api/naver-ads/adjust-ad-bid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adgroupId: compModalCurrentItem.adgroupId, bidAmt })
+      body: JSON.stringify({ adId: compModalCurrentItem.adId, bidAmt })
     });
     const result = await res.json();
     hideLoader();
-    if (result.nccAdgroupId || result.result) {
-      state.competitiveData.forEach(d => { if (d.adgroupId === compModalCurrentItem.adgroupId) d.currentCpc = bidAmt; });
+    if (result.nccAdId) {
+      state.competitiveData.forEach(d => { if (d.adId === compModalCurrentItem.adId) d.currentCpc = bidAmt; });
       document.getElementById('comp-modal-current-cpc').innerText = '₩' + bidAmt.toLocaleString();
-      const tableInput = document.getElementById(`comp-cpc-${compModalCurrentItem.adgroupId}`);
+      const tableInput = document.getElementById(`comp-cpc-${compModalCurrentItem.adId}`);
       if (tableInput) tableInput.value = bidAmt;
-      alert(`CPC ₩${bidAmt.toLocaleString()} 입찰가가 네이버에 동기화되었습니다!`);
+      alert(`CPC ₩${bidAmt.toLocaleString()} 소재 입찰가가 네이버에 동기화되었습니다!`);
     } else {
       alert('입찰가 전송 실패: ' + JSON.stringify(result));
     }
@@ -2878,25 +2878,25 @@ window.applyBulkCompCpc = function() {
   });
 };
 
-window.saveCompCpcToServer = async function(adgroupId) {
-  const input = document.getElementById(`comp-cpc-${adgroupId}`);
+window.saveCompCpcToServer = async function(adId) {
+  const input = document.getElementById(`comp-cpc-${adId}`);
   if (!input) return;
   const bidAmt = parseInt(input.value, 10);
   if (!bidAmt || bidAmt < 70) { alert('70원 이상의 입찰가를 입력해 주세요.'); return; }
 
-  showLoader('네이버 광고 서버에 CPC 입찰가 전송 중...');
+  showLoader('네이버 광고 서버에 소재 입찰가 전송 중...');
   try {
-    const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+    const res = await resilientFetch(`/api/naver-ads/adjust-ad-bid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adgroupId, bidAmt })
+      body: JSON.stringify({ adId, bidAmt })
     });
     const result = await res.json();
     hideLoader();
-    if (result.nccAdgroupId || result.result) {
+    if (result.nccAdId) {
       // Update stored CPC in competitiveData
-      state.competitiveData.forEach(item => { if (item.adgroupId === adgroupId) item.currentCpc = bidAmt; });
-      alert(`CPC ₩${bidAmt.toLocaleString()} 입찰가가 네이버에 동기화되었습니다!`);
+      state.competitiveData.forEach(item => { if (item.adId === adId) item.currentCpc = bidAmt; });
+      alert(`CPC ₩${bidAmt.toLocaleString()} 소재 입찰가가 네이버에 동기화되었습니다!`);
     } else {
       alert('입찰가 전송 실패: ' + JSON.stringify(result));
     }
@@ -2910,39 +2910,39 @@ window.saveBulkCompCpcToServer = async function() {
   const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
   if (checkedBoxes.length === 0) { alert('네이버에 전송할 소재를 선택해 주세요.'); return; }
 
-  // Collect unique adgroupId -> bidAmt pairs
+  // Collect adId -> bidAmt pairs (per-product)
   const updates = new Map();
   checkedBoxes.forEach(cb => {
-    const agId = cb.getAttribute('data-adgroup-id');
-    const input = document.getElementById(`comp-cpc-${agId}`);
-    if (input && !updates.has(agId)) {
-      updates.set(agId, parseInt(input.value, 10));
+    const adId = cb.getAttribute('data-ad-id');
+    const input = document.getElementById(`comp-cpc-${adId}`);
+    if (input && !updates.has(adId)) {
+      updates.set(adId, parseInt(input.value, 10));
     }
   });
 
-  showLoader(`총 ${updates.size}개 광고그룹 CPC 일괄 네이버 전송 중...`);
+  showLoader(`총 ${updates.size}개 소재 CPC 일괄 네이버 전송 중...`);
   let successCount = 0;
-  for (const [agId, bidAmt] of updates) {
+  for (const [adId, bidAmt] of updates) {
     try {
-      const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+      const res = await resilientFetch(`/api/naver-ads/adjust-ad-bid`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adgroupId: agId, bidAmt })
+        body: JSON.stringify({ adId, bidAmt })
       });
       const result = await res.json();
-      if (result.nccAdgroupId || result.result) {
+      if (result.nccAdId) {
         successCount++;
-        state.competitiveData.forEach(item => { if (item.adgroupId === agId) item.currentCpc = bidAmt; });
+        state.competitiveData.forEach(item => { if (item.adId === adId) item.currentCpc = bidAmt; });
       }
     } catch (e) {
-      console.warn(`Bulk CPC update failed for ${agId}:`, e);
+      console.warn(`Bulk CPC update failed for ${adId}:`, e);
     }
   }
 
   hideLoader();
   elements.compSelectAll.checked = false;
   updateCompSelectedCount();
-  alert(`일괄 CPC 전송 완료! (성공: ${successCount} / ${updates.size}개 광고그룹)`);
+  alert(`일괄 CPC 전송 완료! (성공: ${successCount} / ${updates.size}개 소재)`);
 };
 
 async function navigateToShoppingAd(campaignId, adgroupId, adId) {

@@ -172,6 +172,26 @@ class NaverAdsAPI {
   }
 
   /**
+   * Adjust individual Ad bid (per-product CPC for shopping ads)
+   * Uses adAttr.bidAmt to change the individual product's bid.
+   * Requires fields=adAttr query parameter and type field in body.
+   */
+  async adjustAdBid(adId, bidAmt) {
+    const path = `/ncc/ads/${adId}`;
+    // 1. GET current ad to get type
+    const current = await this.request('GET', path);
+    if (!current || !current.nccAdId) {
+      throw new Error('Failed to fetch current ad data');
+    }
+    // 2. PUT with adAttr update
+    return this.request('PUT', path, { fields: 'adAttr' }, {
+      nccAdId: adId,
+      type: current.type,
+      adAttr: { bidAmt, useGroupBidAmt: false }
+    });
+  }
+
+  /**
    * Get Keyword Tool Info (search volume, clicks, CTR)
    * Hint keywords is a comma separated string (max 5 keywords)
    */

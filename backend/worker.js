@@ -261,6 +261,24 @@ export default {
         return jsonResponse(data, 200);
       }
 
+      // 10-3. POST /api/naver-ads/adjust-ad-bid (per-product CPC)
+      if (path === '/api/naver-ads/adjust-ad-bid' && request.method === 'POST') {
+        const db = await getDB(env);
+        const { adId, bidAmt } = await request.json();
+        // 1. GET current ad to get type
+        const current = await proxyNaverAds('GET', `/ncc/ads/${adId}`, {}, null, db.naverAdsSettings);
+        if (!current || !current.nccAdId) {
+          return jsonResponse({ error: 'Failed to fetch current ad data' }, 400);
+        }
+        // 2. PUT with adAttr update (fields=adAttr required)
+        const data = await proxyNaverAds('PUT', `/ncc/ads/${adId}`, { fields: 'adAttr' }, {
+          nccAdId: adId,
+          type: current.type,
+          adAttr: { bidAmt: parseInt(bidAmt, 10), useGroupBidAmt: false }
+        }, db.naverAdsSettings);
+        return jsonResponse(data, 200);
+      }
+
       // 11. GET /api/naver-ads/keyword-info
       if (path === '/api/naver-ads/keyword-info' && request.method === 'GET') {
         const db = await getDB(env);
