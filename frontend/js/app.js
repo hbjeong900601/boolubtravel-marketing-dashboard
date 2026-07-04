@@ -2062,17 +2062,17 @@ async function handleShoppingSyncBid() {
   if (!state.selectedShopProduct) return;
 
   const targetCpc = parseInt(elements.shopCpcSlider.value, 10);
-  const adgroupId = elements.shopAdgroupSelect.value;
+  const adId = elements.shopAdSelect.value;
   
-  if (!adgroupId) return;
+  if (!adId) return;
 
-  showLoader(`네이버 광고 서버에 광고그룹 입찰가(CPC: ₩${targetCpc.toLocaleString()}) 동기화 중...`);
+  showLoader(`네이버 광고 서버에 소재 입찰가(CPC: ₩${targetCpc.toLocaleString()}) 동기화 중...`);
 
   try {
-    const res = await resilientFetch(`/api/naver-ads/adjust-adgroup-bid`, {
+    const res = await resilientFetch(`/api/naver-ads/adjust-ad-bid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adgroupId, bidAmt: targetCpc })
+      body: JSON.stringify({ adId, bidAmt: targetCpc })
     });
 
     if (!res.ok) {
@@ -2083,12 +2083,10 @@ async function handleShoppingSyncBid() {
     const result = await res.json();
     hideLoader();
 
-    alert(`네이버 광고그룹 입찰 정보가 성공적으로 반영되었습니다!\n• 설정 입찰가: ₩${targetCpc.toLocaleString()}\n• 처리 결과: SUCCESS`);
-    
-    // Dynamically update the adgroup's bidAmt in state
-    const grp = state.shopAdgroups.find(g => g.nccAdgroupId === adgroupId);
-    if (grp) {
-      grp.bidAmt = targetCpc;
+    if (result.nccAdId) {
+      alert(`소재 입찰가가 성공적으로 반영되었습니다!\n• 설정 입찰가: ₩${targetCpc.toLocaleString()}\n• 소재 ID: ${adId}`);
+    } else {
+      alert('입찰가 전송 실패: ' + JSON.stringify(result));
     }
   } catch (err) {
     hideLoader();
