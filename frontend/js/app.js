@@ -2854,8 +2854,8 @@ window.adjustSelectedCompCpc = function(amount) {
   const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
   if (checkedBoxes.length === 0) { alert('조정할 소재를 선택해 주세요.'); return; }
   checkedBoxes.forEach(cb => {
-    const agId = cb.getAttribute('data-adgroup-id');
-    const input = document.getElementById(`comp-cpc-${agId}`);
+    const adId = cb.getAttribute('data-ad-id');
+    const input = document.getElementById(`comp-cpc-${adId}`);
     if (input) {
       let val = parseInt(input.value, 10) || 70;
       val = Math.max(70, val + amount);
@@ -2870,8 +2870,8 @@ window.applyBulkCompCpc = function() {
   const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
   if (checkedBoxes.length === 0) { alert('적용할 소재를 선택해 주세요.'); return; }
   checkedBoxes.forEach(cb => {
-    const agId = cb.getAttribute('data-adgroup-id');
-    const input = document.getElementById(`comp-cpc-${agId}`);
+    const adId = cb.getAttribute('data-ad-id');
+    const input = document.getElementById(`comp-cpc-${adId}`);
     if (input) input.value = bulkVal;
   });
 };
