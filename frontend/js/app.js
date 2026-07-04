@@ -217,9 +217,11 @@ function setupEventListeners() {
   });
 
   // Add Product Modal Events
-  elements.openAddProductModalBtn.addEventListener('click', () => {
-    elements.addProductModal.style.display = 'flex';
-  });
+  if (elements.openAddProductModalBtn) {
+    elements.openAddProductModalBtn.addEventListener('click', () => {
+      elements.addProductModal.style.display = 'flex';
+    });
+  }
   
   const closeModal = () => { elements.addProductModal.style.display = 'none'; };
   elements.closeProductModalBtn.addEventListener('click', closeModal);
@@ -228,7 +230,9 @@ function setupEventListeners() {
   elements.addProductForm.addEventListener('submit', handleAddProduct);
 
   // Apply Bidding Strategy to Simulator
-  elements.applyStrategyBidBtn.addEventListener('click', applyStrategyToSimulator);
+  if (elements.applyStrategyBidBtn) {
+    elements.applyStrategyBidBtn.addEventListener('click', applyStrategyToSimulator);
+  }
 
   // Keyword Search Tool
   elements.keywordSearchBtn.addEventListener('click', handleKeywordSearch);
@@ -310,10 +314,7 @@ function switchTab(tabId) {
   let title = '홈 대시보드';
   let subtitle = '부럽트래블 상품 광고 집행 현황 및 마케팅 요약 보고서';
 
-  if (tabId === 'compare') {
-    title = '가격비교 & 광고 전략';
-    subtitle = '네이버 쇼핑 가격비교 파싱 결과 매칭 및 상품별 최적 입찰 전략 추천';
-  } else if (tabId === 'simulator') {
+  if (tabId === 'simulator') {
     title = '키워드 도구 & 적정 노출가 시뮬레이터';
     subtitle = '네이버 키워드 월간 검색량 데이터 연동 및 적정 입찰가에 따른 ROAS 시뮬레이션';
   } else if (tabId === 'bid-manager') {

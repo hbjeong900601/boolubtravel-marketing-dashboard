@@ -24,12 +24,6 @@
           </svg>
           <span>홈 대시보드</span>
         </a>
-        <a class="nav-item" data-tab="compare">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          <span>가격비교 & 전략</span>
-        </a>
         <a class="nav-item" data-tab="simulator">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -174,64 +168,7 @@
         </div>
       </section>
 
-      <!-- TAB 2: PRICE COMPARISON & STRATEGY -->
-      <section class="tab-content" id="tab-compare">
-        <div class="grid-main-layout">
-          <!-- Left: Product list and competitors comparison -->
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">부럽트래블 상품 목록 및 타사 가격 매칭</h3>
-              <button class="btn btn-primary" id="open-add-product-modal-btn">+ 새 상품 추가</button>
-            </div>
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>상품명</th>
-                    <th>부럽 가격</th>
-                    <th>경쟁사 최저가</th>
-                    <th>가격 경쟁력</th>
-                    <th>최근 분석일</th>
-                    <th>분석 및 매칭</th>
-                  </tr>
-                </thead>
-                <tbody id="compare-product-table-body">
-                  <!-- Rendered via JS -->
-                </tbody>
-              </table>
-            </div>
-          </div>
 
-          <!-- Right: Visual comparison and bidding strategy -->
-          <div class="card" id="strategy-details-card" style="display: none;">
-            <div class="card-header">
-              <h3 class="card-title" id="strategy-product-title">선택 상품 가격 비교</h3>
-            </div>
-            <div style="position: relative; height: 220px; margin-bottom: 20px;">
-              <canvas id="competitor-price-chart"></canvas>
-            </div>
-            <div class="form-group" style="margin-top: 16px;">
-              <label>가격 경쟁력 평가</label>
-              <div id="strategy-price-badge" class="badge badge-success" style="padding: 6px 12px; font-size: 13px;">가격 우위 (-₩20,000)</div>
-            </div>
-            <div class="form-group">
-              <label>추천 네이버 검색광고 입찰 전략</label>
-              <div class="insight-item positive" id="strategy-recommendation-box" style="margin-top: 8px;">
-                <div class="insight-icon">💡</div>
-                <div class="insight-content">
-                  <h4 id="strategy-recommendation-title">공격적 입찰 권장 (Rank 1-3)</h4>
-                  <p id="strategy-recommendation-desc">타사 대비 가격 경쟁력이 우수하므로, 노출 순위를 상위로 끌어올리면 높은 구매 전환율(CVR)을 확보하여 ROAS를 극대화할 수 있습니다.</p>
-                </div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>권장 CPC 입찰가</label>
-              <div style="font-size: 20px; font-weight: 700; color: var(--color-naver-glow);" id="strategy-recommended-cpc">1,200 원</div>
-            </div>
-            <button class="btn btn-naver" style="width: 100%;" id="apply-strategy-bid-btn">이 권장 입찰가 적용하기 (입찰 관리 이동)</button>
-          </div>
-        </div>
-      </section>
 
       <!-- TAB 3: KEYWORD TOOL & SIMULATOR -->
       <section class="tab-content" id="tab-simulator">
@@ -891,6 +828,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=3.1"></script>
+  <script src="js/app.js?v=3.2"></script>
 </body>
 </html>
