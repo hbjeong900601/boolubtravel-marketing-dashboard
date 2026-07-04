@@ -137,6 +137,15 @@ class NaverAdsAPI {
   }
 
   /**
+   * Toggle Ad userLock (on/off)
+   * userLock: true = paused, false = active
+   */
+  async toggleAd(adId, userLock) {
+    const path = `/ncc/ads/${adId}`;
+    return this.request('PUT', path, {}, { userLock });
+  }
+
+  /**
    * Get Keyword Tool Info (search volume, clicks, CTR)
    * Hint keywords is a comma separated string (max 5 keywords)
    */

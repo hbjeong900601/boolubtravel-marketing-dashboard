@@ -1828,18 +1828,44 @@ async function handleShoppingAdgroupSelection() {
       select.appendChild(opt);
       select.disabled = true;
     } else {
-      state.shopAds.forEach(ad => {
-        const opt = document.createElement('option');
-        opt.value = ad.nccAdId;
-        const displayName = ad.referenceData?.productName || 
-                            ad.referenceData?.productTitle || 
-                            ad.name || 
-                            ad.ad?.productName || 
-                            ad.adattr?.productName || 
-                            '이름 없음';
-        opt.innerText = displayName;
-        select.appendChild(opt);
-      });
+      // Filter to only show eligible (active) ads
+      const eligibleAds = state.shopAds.filter(ad => ad.inspectStatus === 'ELIGIBLE' && !ad.userLock);
+      const pausedAds = state.shopAds.filter(ad => ad.inspectStatus !== 'ELIGIBLE' || ad.userLock);
+      
+      if (eligibleAds.length > 0) {
+        const grp1 = document.createElement('optgroup');
+        grp1.label = `🟢 운영 가능 (${eligibleAds.length}개)`;
+        eligibleAds.forEach(ad => {
+          const opt = document.createElement('option');
+          opt.value = ad.nccAdId;
+          const displayName = ad.referenceData?.productName || 
+                              ad.referenceData?.productTitle || 
+                              ad.name || 
+                              ad.ad?.productName || 
+                              ad.adattr?.productName || 
+                              '이름 없음';
+          opt.innerText = displayName;
+          grp1.appendChild(opt);
+        });
+        select.appendChild(grp1);
+      }
+      
+      if (pausedAds.length > 0) {
+        const grp2 = document.createElement('optgroup');
+        grp2.label = `⏸️ 중지/비활성 (${pausedAds.length}개)`;
+        pausedAds.forEach(ad => {
+          const opt = document.createElement('option');
+          opt.value = ad.nccAdId;
+          const displayName = ad.referenceData?.productName || 
+                              ad.referenceData?.productTitle || 
+                              ad.name || 
+                              '이름 없음';
+          opt.innerText = `[중지] ${displayName}`;
+          opt.style.opacity = '0.5';
+          grp2.appendChild(opt);
+        });
+        select.appendChild(grp2);
+      }
     }
 
     elements.shopOptimizerPanels.style.display = 'none';
@@ -1858,11 +1884,28 @@ async function handleShoppingAdSelection() {
     elements.shopOptimizerPanels.style.display = 'none';
     elements.shopNoDataMsg.style.display = 'block';
     elements.shopNoDataMsg.innerText = '3단계 광고 소재(상품)를 선택하시면 실시간 경쟁사 가격 파싱이 실행됩니다.';
+    document.getElementById('shop-ad-toggle-btn').style.display = 'none';
     return;
   }
 
   const ad = state.shopAds.find(a => a.nccAdId === adId);
   if (!ad) return;
+
+  // Show toggle button with current status
+  const toggleBtn = document.getElementById('shop-ad-toggle-btn');
+  const toggleLabel = document.getElementById('shop-ad-toggle-label');
+  toggleBtn.style.display = 'inline-flex';
+  if (ad.userLock) {
+    toggleLabel.innerText = '🔴 OFF → ON';
+    toggleBtn.style.background = 'rgba(255,82,82,0.2)';
+    toggleBtn.style.borderColor = '#ff5252';
+    toggleBtn.style.color = '#ff5252';
+  } else {
+    toggleLabel.innerText = '🟢 ON → OFF';
+    toggleBtn.style.background = 'rgba(0,230,118,0.1)';
+    toggleBtn.style.borderColor = '#00e676';
+    toggleBtn.style.color = '#00e676';
+  }
 
   const adName = ad.referenceData?.productName || 
                  ad.referenceData?.productTitle || 
@@ -2311,7 +2354,9 @@ async function runCompetitiveScan(isAuto = false) {
       for (const ag of adgroups) {
         const adsRes = await resilientFetch(`/api/naver-ads/ads?adgroupId=${ag.nccAdgroupId}`);
         const ads = await adsRes.json();
-        for (const ad of ads) {
+        // Filter: only scan ELIGIBLE (운영 가능) ads
+        const eligibleAds = ads.filter(ad => ad.inspectStatus === 'ELIGIBLE' && !ad.userLock);
+        for (const ad of eligibleAds) {
           const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
           const price = parseInt(ad.referenceData?.price, 10) || parseInt(ad.referenceData?.lowPrice, 10) || parseInt(ad.adAttr?.price, 10) || 0;
           if (adName && price > 0) {
@@ -2461,7 +2506,9 @@ async function runGroupCompetitiveScan() {
 
   try {
     const adsRes = await resilientFetch(`/api/naver-ads/ads?adgroupId=${adgroupId}`);
-    const ads = await adsRes.json();
+    const rawAds = await adsRes.json();
+    // Filter: only scan ELIGIBLE (운영 가능) ads
+    const ads = rawAds.filter(ad => ad.inspectStatus === 'ELIGIBLE' && !ad.userLock);
 
     const allAds = [];
     for (const ad of ads) {
@@ -2728,6 +2775,56 @@ window.saveCompModalCpc = async function() {
 document.getElementById('comp-detail-modal')?.addEventListener('click', function(e) {
   if (e.target === this) closeCompDetailModal();
 });
+
+// --- Ad On/Off Toggle ---
+window.toggleShopAdStatus = async function() {
+  const adId = elements.shopAdSelect.value;
+  if (!adId) { alert('소재를 선택해 주세요.'); return; }
+  const ad = state.shopAds.find(a => a.nccAdId === adId);
+  if (!ad) return;
+
+  const newLock = !ad.userLock;
+  const action = newLock ? '중지' : '활성화';
+  if (!confirm(`이 소재를 ${action}하시겠습니까?`)) return;
+
+  showLoader(`소재 ${action} 중...`);
+  try {
+    const res = await resilientFetch(`/api/naver-ads/toggle-ad`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adId, userLock: newLock })
+    });
+    const result = await res.json();
+    hideLoader();
+    
+    if (result.nccAdId || result.result) {
+      // Update local state
+      ad.userLock = newLock;
+      
+      // Update toggle button display
+      const toggleBtn = document.getElementById('shop-ad-toggle-btn');
+      const toggleLabel = document.getElementById('shop-ad-toggle-label');
+      if (newLock) {
+        toggleLabel.innerText = '🔴 OFF → ON';
+        toggleBtn.style.background = 'rgba(255,82,82,0.2)';
+        toggleBtn.style.borderColor = '#ff5252';
+        toggleBtn.style.color = '#ff5252';
+      } else {
+        toggleLabel.innerText = '🟢 ON → OFF';
+        toggleBtn.style.background = 'rgba(0,230,118,0.1)';
+        toggleBtn.style.borderColor = '#00e676';
+        toggleBtn.style.color = '#00e676';
+      }
+      
+      alert(`소재가 ${action}되었습니다.`);
+    } else {
+      alert('상태 변경 실패: ' + JSON.stringify(result));
+    }
+  } catch (err) {
+    hideLoader();
+    alert('상태 변경 실패: ' + err.message);
+  }
+};
 
 // --- Competitive Table Bulk Management Functions ---
 

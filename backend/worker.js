@@ -256,6 +256,14 @@ export default {
         return jsonResponse(data, 200);
       }
 
+      // 12. POST /api/naver-ads/toggle-ad
+      if (path === '/api/naver-ads/toggle-ad' && request.method === 'POST') {
+        const db = await getDB(env);
+        const { adId, userLock } = await request.json();
+        const data = await proxyNaverAds('PUT', `/ncc/ads/${adId}`, {}, { userLock }, db.naverAdsSettings);
+        return jsonResponse(data, 200);
+      }
+
       return new Response('Not Found', { status: 404 });
 
     } catch (err) {

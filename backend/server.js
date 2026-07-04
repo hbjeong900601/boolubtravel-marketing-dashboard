@@ -271,6 +271,20 @@ app.get('/api/naver-ads/keyword-info', async (req, res) => {
   }
 });
 
+// Toggle Ad on/off (userLock)
+app.post('/api/naver-ads/toggle-ad', async (req, res) => {
+  const { adId, userLock } = req.body;
+  if (!adId || userLock === undefined) {
+    return res.status(400).json({ error: 'Ad ID and userLock are required.' });
+  }
+  try {
+    const result = await adApi.toggleAd(adId, userLock);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, '../frontend')));
 
