@@ -2474,12 +2474,6 @@ async function runCompetitiveScan(isAuto = false) {
   saveCompetitiveDataToCache();
   startCompCountdown();
 
-  const disadvantaged = state.competitiveData.filter(d => d.status === 'disadvantage');
-  if (disadvantaged.length > 0) {
-    elements.compAlertBanner.style.display = 'flex';
-    elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다. 가격 조정 또는 입찰 전략 검토가 필요합니다.`;
-  } else { elements.compAlertBanner.style.display = 'none'; }
-
   elements.compExportCsvBtn.disabled = false;
   renderCompetitiveTable();
   renderCompetitiveKPIs();
@@ -2531,6 +2525,13 @@ async function handleCompCampaignSelection() {
   elements.compAdgroupSelect.disabled = true;
   elements.compAdgroupSelect.innerHTML = '<option value="">광고 그룹을 선택하세요</option>';
   elements.compGroupScanBtn.disabled = true;
+
+  // Trigger filtering UI updates
+  renderCompetitiveTable();
+  renderCompetitiveKPIs();
+  drawCompetitiveChart();
+  renderStrategySummary();
+
   if (!campaignId) return;
 
   showLoader('광고 그룹 리스트 가져오는 중...');
@@ -2555,6 +2556,12 @@ async function handleCompCampaignSelection() {
 function handleCompAdgroupSelection() {
   const adgroupId = elements.compAdgroupSelect.value;
   elements.compGroupScanBtn.disabled = !adgroupId;
+
+  // Trigger filtering UI updates
+  renderCompetitiveTable();
+  renderCompetitiveKPIs();
+  drawCompetitiveChart();
+  renderStrategySummary();
 }
 
 async function runGroupCompetitiveScan() {
@@ -2600,7 +2607,8 @@ async function runGroupCompetitiveScan() {
       return;
     }
 
-    state.competitiveData = [];
+    // Filter out previous data for this adgroup so we don't duplicate
+    state.competitiveData = state.competitiveData.filter(item => item.adgroupId !== adgroupId);
     const total = allAds.length;
     for (let i = 0; i < total; i++) {
       const ad = allAds[i];
@@ -2621,12 +2629,7 @@ async function runGroupCompetitiveScan() {
     elements.compScanProgressWrapper.style.display = 'none';
     elements.compGroupScanBtn.disabled = false;
     elements.compLastScanTime.innerText = formatScanTime(new Date());
-
-    const disadvantaged = state.competitiveData.filter(d => d.status === 'disadvantage');
-    if (disadvantaged.length > 0) {
-      elements.compAlertBanner.style.display = 'flex';
-      elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다. CPC 조정 또는 가격 검토가 필요합니다.`;
-    } else { elements.compAlertBanner.style.display = 'none'; }
+    saveCompetitiveDataToCache();
 
     elements.compExportCsvBtn.disabled = false;
     renderCompetitiveTable();
@@ -2639,6 +2642,19 @@ async function runGroupCompetitiveScan() {
     elements.compScanProgressWrapper.style.display = 'none';
     alert('스캔 실패: ' + err.message);
   }
+}
+
+function getFilteredCompetitiveData() {
+  const selectedCampaignId = elements.compCampaignSelect ? elements.compCampaignSelect.value : '';
+  const selectedAdgroupId = elements.compAdgroupSelect ? elements.compAdgroupSelect.value : '';
+  let data = [...state.competitiveData];
+
+  if (selectedAdgroupId) {
+    data = data.filter(d => d.adgroupId === selectedAdgroupId);
+  } else if (selectedCampaignId) {
+    data = data.filter(d => d.campaignId === selectedCampaignId);
+  }
+  return data;
 }
 
 function getRecommendedCpc(item) {
@@ -2657,7 +2673,7 @@ function getRecommendedCpc(item) {
 function renderCompetitiveTable() {
   const filter = elements.compStatusFilter.value;
   const sort = elements.compSortSelect.value;
-  let data = [...state.competitiveData];
+  let data = getFilteredCompetitiveData();
 
   if (filter !== 'all') data = data.filter(d => d.status === filter);
 
@@ -2714,6 +2730,18 @@ function renderCompetitiveTable() {
       <td style="text-align:center;"><button class="btn-detail-action" onclick="openCompDetailModal(${idx})" style="font-size:11px; padding:4px 10px;">상세</button></td>
     </tr>`;
   }).join('');
+  renderCompetitiveAlertBanner();
+}
+
+function renderCompetitiveAlertBanner() {
+  const data = getFilteredCompetitiveData();
+  const disadvantaged = data.filter(d => d.status === 'disadvantage');
+  if (disadvantaged.length > 0) {
+    elements.compAlertBanner.style.display = 'flex';
+    elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다. CPC 조정 또는 가격 검토가 필요합니다.`;
+  } else {
+    elements.compAlertBanner.style.display = 'none';
+  }
 }
 
 // --- Competitive Detail Modal ---
@@ -3039,8 +3067,15 @@ async function navigateToShoppingAd(campaignId, adgroupId, adId) {
 }
 
 function renderCompetitiveKPIs() {
-  const data = state.competitiveData;
-  if (data.length === 0) return;
+  const data = getFilteredCompetitiveData();
+  if (data.length === 0) {
+    elements.compKpiTotal.innerText = '0개';
+    elements.compKpiLowest.innerText = '0개';
+    elements.compKpiAdvantage.innerText = '0개';
+    elements.compKpiDisadvantage.innerText = '0개';
+    elements.compKpiAvgRatio.innerText = '-';
+    return;
+  }
   const lowestCount = data.filter(d => d.status === 'lowest').length;
   const advantageCount = data.filter(d => d.status === 'lowest' || (d.gap !== null && d.gap < -(d.price * 0.05))).length;
   const disadvantageCount = data.filter(d => d.status === 'disadvantage').length;
@@ -3057,8 +3092,12 @@ function renderCompetitiveKPIs() {
 function drawCompetitiveChart() {
   const canvas = document.getElementById('comp-distribution-chart');
   if (!canvas) return;
-  const data = state.competitiveData;
-  if (data.length === 0) return;
+  const data = getFilteredCompetitiveData();
+  if (data.length === 0) {
+    if (state.charts.competitive) state.charts.competitive.destroy();
+    if (elements.compChartLegend) elements.compChartLegend.innerHTML = '<div style="opacity:0.5; font-size:12px;">데이터가 없습니다.</div>';
+    return;
+  }
   const counts = { lowest: data.filter(d => d.status === 'lowest').length, close: data.filter(d => d.status === 'close').length, disadvantage: data.filter(d => d.status === 'disadvantage').length, monopoly: data.filter(d => d.status === 'monopoly').length };
   const ctx = canvas.getContext('2d');
   if (state.charts.competitive) state.charts.competitive.destroy();
@@ -3072,8 +3111,11 @@ function drawCompetitiveChart() {
 function renderStrategySummary() {
   const container = document.getElementById('comp-strategy-summary');
   if (!container) return;
-  const data = state.competitiveData;
-  if (data.length === 0) return;
+  const data = getFilteredCompetitiveData();
+  if (data.length === 0) {
+    container.innerHTML = '<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>';
+    return;
+  }
   const lc = data.filter(d => d.status === 'lowest').length, cc = data.filter(d => d.status === 'close').length, dc = data.filter(d => d.status === 'disadvantage').length, mc = data.filter(d => d.status === 'monopoly').length;
   const items = [];
   if (lc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lc}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있으므로 전환율이 높습니다.</div></div>`);
@@ -3085,11 +3127,12 @@ function renderStrategySummary() {
 }
 
 function exportCompetitiveCSV() {
-  if (state.competitiveData.length === 0) return;
+  const data = getFilteredCompetitiveData();
+  if (data.length === 0) return;
   const BOM = '\uFEFF';
   const headers = ['상품명','자사 판매가','경쟁사 최저가','가격 차이','경쟁력 상태','최저가 업체','경쟁사 수','전략','캠페인','광고그룹'];
   const statusLabels = { lowest: '최저가', close: '근접', disadvantage: '열위', monopoly: '독점' };
-  const rows = state.competitiveData.map(item => {
+  const rows = data.map(item => {
     const s = getCompetitiveStrategy(item.status);
     return [`"${item.adName.replace(/"/g,'""')}"`, item.price, item.minCompPrice ?? '-', item.gap ?? '-', statusLabels[item.status] || '-', `"${item.minCompName.replace(/"/g,'""')}"`, item.competitorCount, `"${s.label}"`, `"${item.campaignName.replace(/"/g,'""')}"`, `"${item.adgroupName.replace(/"/g,'""')}"`].join(',');
   });
