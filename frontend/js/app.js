@@ -2648,9 +2648,9 @@ function getRecommendedCpc(item) {
   } else if (item.status === 'close') {
     return { value: currentCpc || 150, label: '→ 유지', color: '#ffc107', tip: '경쟁 근접 → 현재 CPC 유지 권장' };
   } else if (item.status === 'disadvantage') {
-    return { value: Math.max(Math.round(currentCpc * 0.7 / 10) * 10, 70), label: '↓ 절감', color: '#ff5252', tip: '가격 열위 → CPC 낮춰 비용 절감' };
+    return { value: Math.max(Math.round(currentCpc * 0.7 / 10) * 10, 50), label: '↓ 절감', color: '#ff5252', tip: '가격 열위 → CPC 낮춰 비용 절감' };
   } else {
-    return { value: 70, label: '↓ 최소', color: '#a78bfa', tip: '독점 → 최소 입찰가로 효율 운영' };
+    return { value: 50, label: '↓ 최소', color: '#a78bfa', tip: '독점 → 최소 입찰가로 효율 운영' };
   }
 }
 
@@ -2705,7 +2705,7 @@ function renderCompetitiveTable() {
       </td>
       <td>
         <div style="display:flex; align-items:center; gap:3px;">
-          <input type="number" class="input-control comp-cpc-input" value="${rec.value || currentCpc}" step="50" min="70"
+          <input type="number" class="input-control comp-cpc-input" value="${rec.value || currentCpc}" step="50" min="50"
             data-ad-id="${item.adId}" id="comp-cpc-${item.adId}"
             style="width:75px; text-align:right; font-size:12px; height:26px; padding:0 5px;">
           <button class="btn btn-naver btn-sm" style="padding:2px 5px; font-size:10px; height:24px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adId}')">전송</button>
@@ -2805,8 +2805,8 @@ window.closeCompDetailModal = function() {
 
 window.adjustCompModalCpc = function(amount) {
   const input = document.getElementById('comp-modal-new-cpc');
-  let val = parseInt(input.value, 10) || 70;
-  val = Math.max(70, val + amount);
+  let val = parseInt(input.value, 10) || 50;
+  val = Math.max(50, val + amount);
   input.value = val;
 };
 
@@ -2819,7 +2819,7 @@ window.applyCompModalRecCpc = function() {
 window.saveCompModalCpc = async function() {
   if (!compModalCurrentItem) return;
   const bidAmt = parseInt(document.getElementById('comp-modal-new-cpc').value, 10);
-  if (!bidAmt || bidAmt < 70) { alert('70원 이상의 입찰가를 입력해 주세요.'); return; }
+  if (!bidAmt || bidAmt < 50) { alert('50원 이상의 입찰가를 입력해 주세요.'); return; }
 
   showLoader('네이버 광고 서버에 CPC 입찰가 전송 중...');
   try {
@@ -2922,8 +2922,8 @@ window.adjustSelectedCompCpc = function(amount) {
     if (!adId) return;
     const input = document.getElementById('comp-cpc-' + adId);
     if (input) {
-      let val = parseInt(input.value, 10) || 70;
-      val = Math.max(70, val + amount);
+      let val = parseInt(input.value, 10) || 50;
+      val = Math.max(50, val + amount);
       input.value = val;
       applied++;
     }
@@ -2935,7 +2935,7 @@ window.applyBulkCompCpc = function() {
   const bulkInput = document.getElementById('comp-bulk-cpc-input');
   if (!bulkInput) { alert('입력 필드를 찾을 수 없습니다.'); return; }
   const bulkVal = parseInt(bulkInput.value, 10);
-  if (!bulkVal || bulkVal < 70) { alert('70원 이상의 올바른 입찰가를 입력해 주세요.'); return; }
+  if (!bulkVal || bulkVal < 50) { alert('50원 이상의 올바른 입찰가를 입력해 주세요.'); return; }
   const checkedBoxes = document.querySelectorAll('.comp-kw-checkbox:checked');
   if (checkedBoxes.length === 0) { alert('적용할 소재를 선택해 주세요.'); return; }
   let applied = 0;
@@ -2959,7 +2959,7 @@ window.saveCompCpcToServer = async function(adId) {
   const input = document.getElementById(`comp-cpc-${adId}`);
   if (!input) return;
   const bidAmt = parseInt(input.value, 10);
-  if (!bidAmt || bidAmt < 70) { alert('70원 이상의 입찰가를 입력해 주세요.'); return; }
+  if (!bidAmt || bidAmt < 50) { alert('50원 이상의 입찰가를 입력해 주세요.'); return; }
 
   showLoader('네이버 광고 서버에 소재 입찰가 전송 중...');
   try {
