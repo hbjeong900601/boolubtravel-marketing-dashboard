@@ -17,10 +17,51 @@ if (API_BASE && !/^https?:\/\//i.test(API_BASE) && API_BASE !== 'http://localhos
   API_BASE = 'https://' + API_BASE;
 }
 
+// --- Authentication Check ---
+(async function checkAuth() {
+  const token = localStorage.getItem('boolub_token');
+  if (!token) {
+    window.location.href = '/login';
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/verify`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) {
+      localStorage.removeItem('boolub_token');
+      localStorage.removeItem('boolub_user');
+      window.location.href = '/login';
+      return;
+    }
+  } catch (e) {
+    // Network error - allow offline access if token exists
+    console.warn('Auth verification failed (network):', e.message);
+  }
+})();
+
+function getAuthHeaders(existingHeaders) {
+  const token = localStorage.getItem('boolub_token');
+  const headers = existingHeaders || {};
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token;
+  }
+  return headers;
+}
+
 // Resilient fetch: auto-fallback to Workers backend when primary API_BASE is unreachable
-async function resilientFetch(path, options) {
+async function resilientFetch(path, options = {}) {
+  // Inject auth token into all requests
+  options.headers = getAuthHeaders(options.headers);
   try {
     const res = await fetch(`${API_BASE}${path}`, options);
+    // Handle 401 - redirect to login
+    if (res.status === 401) {
+      localStorage.removeItem('boolub_token');
+      localStorage.removeItem('boolub_user');
+      window.location.href = '/login';
+      return res;
+    }
     return res;
   } catch (primaryErr) {
     // If API_BASE is already the Workers fallback, don't retry
@@ -28,12 +69,34 @@ async function resilientFetch(path, options) {
     console.warn(`Primary API (${API_BASE}) failed, falling back to Workers backend...`, primaryErr.message);
     try {
       const fallbackRes = await fetch(`${WORKERS_FALLBACK}${path}`, options);
+      if (fallbackRes.status === 401) {
+        localStorage.removeItem('boolub_token');
+        localStorage.removeItem('boolub_user');
+        window.location.href = '/login';
+        return fallbackRes;
+      }
       return fallbackRes;
     } catch (fallbackErr) {
       throw primaryErr; // throw the original error if fallback also fails
     }
   }
 }
+
+// Logout function
+window.handleLogout = function() {
+  localStorage.removeItem('boolub_token');
+  localStorage.removeItem('boolub_user');
+  window.location.href = '/login';
+};
+
+// Display logged-in user
+(function showUser() {
+  const username = localStorage.getItem('boolub_user');
+  const el = document.getElementById('user-display');
+  if (el && username) {
+    el.innerText = username;
+  }
+})();
 
 // State management
 let state = {

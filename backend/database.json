@@ -157,5 +157,12 @@
     "naverOpenClientId": "j04ymgPrCue4jCVqd_YP",
     "naverOpenClientSecret": "twa9kbHa06",
     "isConnected": true
-  }
+  },
+  "users": [
+    {
+      "username": "admin",
+      "passwordHash": "8bce71b5d5ba29779cf85ee66b26895b5a9b0698f8eb56d8493ba2070c489ef8",
+      "role": "admin"
+    }
+  ]
 }

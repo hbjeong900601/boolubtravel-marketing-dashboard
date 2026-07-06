@@ -69,6 +69,42 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     
+    // JWT secret for auth
+    const JWT_SECRET = env.JWT_SECRET || 'boolub-dashboard-secret-2026-xK9mP2qR';
+
+    // Auth helper functions
+    async function hashPassword(password) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password + JWT_SECRET);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function generateToken(username) {
+      const payload = JSON.stringify({ username, exp: Date.now() + (24 * 60 * 60 * 1000) });
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey('raw', encoder.encode(JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+      const signature = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+      return btoa(payload) + '.' + signature;
+    }
+
+    async function verifyToken(token) {
+      try {
+        const [payloadB64, signature] = token.split('.');
+        if (!payloadB64 || !signature) return null;
+        const payload = atob(payloadB64);
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey('raw', encoder.encode(JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+        const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+        if (signature !== expected) return null;
+        const data = JSON.parse(payload);
+        if (data.exp < Date.now()) return null;
+        return data;
+      } catch (e) { return null; }
+    }
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -77,6 +113,66 @@ export default {
     }
 
     try {
+      // --- AUTH ROUTES (no auth required) ---
+
+      // Login
+      if (path === '/api/auth/login' && request.method === 'POST') {
+        const { username, password } = await request.json();
+        if (!username || !password) {
+          return jsonResponse({ error: '아이디와 비밀번호를 입력해주세요.' }, 400);
+        }
+        const db = await getDB(env);
+        if (!db.users || db.users.length === 0) {
+          // Initialize default user
+          db.users = [{ username: 'admin', passwordHash: await hashPassword('boolub2026!'), role: 'admin' }];
+          await saveDB(db, env);
+        }
+        const user = db.users.find(u => u.username === username);
+        const inputHash = await hashPassword(password);
+        if (!user || user.passwordHash !== inputHash) {
+          return jsonResponse({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, 401);
+        }
+        const token = await generateToken(username);
+        return jsonResponse({ token, username: user.username, role: user.role }, 200);
+      }
+
+      // Verify token
+      if (path === '/api/auth/verify' && request.method === 'GET') {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.replace('Bearer ', '');
+        if (!token) return jsonResponse({ valid: false }, 401);
+        const data = await verifyToken(token);
+        if (!data) return jsonResponse({ valid: false }, 401);
+        return jsonResponse({ valid: true, username: data.username }, 200);
+      }
+
+      // Change password
+      if (path === '/api/auth/change-password' && request.method === 'POST') {
+        const authHeader = request.headers.get('Authorization') || '';
+        const tokenStr = authHeader.replace('Bearer ', '');
+        const userData = await verifyToken(tokenStr);
+        if (!userData) return jsonResponse({ error: '인증이 필요합니다.' }, 401);
+        const { currentPassword, newPassword } = await request.json();
+        if (!currentPassword || !newPassword) return jsonResponse({ error: '현재 비밀번호와 새 비밀번호를 입력해주세요.' }, 400);
+        if (newPassword.length < 6) return jsonResponse({ error: '새 비밀번호는 6자 이상이어야 합니다.' }, 400);
+        const db = await getDB(env);
+        const user = db.users.find(u => u.username === userData.username);
+        const curHash = await hashPassword(currentPassword);
+        if (!user || user.passwordHash !== curHash) return jsonResponse({ error: '현재 비밀번호가 올바르지 않습니다.' }, 401);
+        user.passwordHash = await hashPassword(newPassword);
+        await saveDB(db, env);
+        return jsonResponse({ success: true, message: '비밀번호가 변경되었습니다.' }, 200);
+      }
+
+      // --- AUTH MIDDLEWARE for all other /api routes ---
+      if (path.startsWith('/api/')) {
+        const authHeader = request.headers.get('Authorization') || '';
+        const token = authHeader.replace('Bearer ', '');
+        if (!token) return jsonResponse({ error: '인증이 필요합니다.' }, 401);
+        const authData = await verifyToken(token);
+        if (!authData) return jsonResponse({ error: '인증이 만료되었습니다. 다시 로그인해주세요.' }, 401);
+      }
+
       // 1. GET /api/products
       if (path === '/api/products' && request.method === 'GET') {
         const db = await getDB(env);

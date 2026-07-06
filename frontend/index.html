@@ -71,7 +71,7 @@
           <h1 id="main-title-text">홈 대시보드</h1>
           <p id="main-subtitle-text">부럽트래블 상품 광고 집행 현황 및 마케팅 요약 보고서</p>
         </div>
-        <div class="header-status">
+        <div class="header-status" style="display:flex; align-items:center; gap:10px;">
           <div class="api-status-badge" id="api-connection-status">
             <span class="indicator-dot"></span>
             <span class="status-text">네이버 광고 API 미연동 (시뮬레이션)</span>
@@ -82,6 +82,10 @@
             </svg>
             실시간 데이터 동기화
           </button>
+          <div style="display:flex; align-items:center; gap:6px; margin-left:8px;">
+            <span id="user-display" style="font-size:12px; color:rgba(255,255,255,0.5);"></span>
+            <button onclick="handleLogout()" style="background:rgba(255,82,82,0.15); border:1px solid rgba(255,82,82,0.3); color:#ff5252; padding:5px 12px; border-radius:8px; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,82,82,0.25)'" onmouseout="this.style.background='rgba(255,82,82,0.15)'">로그아웃</button>
+          </div>
         </div>
       </header>
 
@@ -953,6 +957,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=5.2"></script>
+  <script src="js/app.js?v=6.0"></script>
 </body>
 </html>
