@@ -236,7 +236,7 @@
   <script>
     // If already logged in, redirect to dashboard
     if (localStorage.getItem('boolub_token')) {
-      window.location.href = '/index.html';
+      window.location.href = '/';
     }
 
     // Resolve API base URL (same logic as app.js)
@@ -270,7 +270,7 @@
         if (res.ok && data.token) {
           localStorage.setItem('boolub_token', data.token);
           localStorage.setItem('boolub_user', data.username);
-          window.location.href = '/index.html';
+          window.location.href = '/';
         } else {
           errorMsg.innerText = data.error || '아이디 또는 비밀번호가 올바르지 않습니다.';
           errorMsg.style.display = 'block';
