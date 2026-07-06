@@ -78,7 +78,7 @@ function verifyToken(token) {
   const db = getDB();
   if (!db.users || db.users.length === 0) {
     db.users = [
-      { username: 'admin', passwordHash: hashPassword('boolub2026!'), role: 'admin' }
+      { username: 'boolubtravel', passwordHash: hashPassword('1q2w3e4r'), role: 'admin' }
     ];
     saveDB(db);
     console.log('Default admin user created (username: admin, password: boolub2026!)');

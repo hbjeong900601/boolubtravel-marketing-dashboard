@@ -124,7 +124,7 @@ export default {
         const db = await getDB(env);
         if (!db.users || db.users.length === 0) {
           // Initialize default user
-          db.users = [{ username: 'admin', passwordHash: await hashPassword('boolub2026!'), role: 'admin' }];
+          db.users = [{ username: 'boolubtravel', passwordHash: await hashPassword('1q2w3e4r'), role: 'admin' }];
           await saveDB(db, env);
         }
         const user = db.users.find(u => u.username === username);
