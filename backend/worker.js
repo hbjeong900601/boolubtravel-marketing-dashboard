@@ -432,7 +432,7 @@ function getCorsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Timestamp, X-API-KEY, X-Customer, X-Signature'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Timestamp, X-API-KEY, X-Customer, X-Signature'
   };
 }
 
