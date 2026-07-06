@@ -239,6 +239,12 @@
       window.location.href = '/';
     }
 
+    // Resolve API base URL (same logic as app.js)
+    const WORKERS_FALLBACK = 'https://boolubtravel-marketing-backend.je3899.workers.dev';
+    const API_BASE = localStorage.getItem('boolub_backend_url') ||
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? '' : WORKERS_FALLBACK);
+
     async function handleLogin(e) {
       e.preventDefault();
       const btn = document.getElementById('login-btn');
@@ -253,7 +259,7 @@
       errorMsg.style.display = 'none';
 
       try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
