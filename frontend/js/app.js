@@ -21,7 +21,7 @@ if (API_BASE && !/^https?:\/\//i.test(API_BASE) && API_BASE !== 'http://localhos
 (async function checkAuth() {
   const token = localStorage.getItem('boolub_token');
   if (!token) {
-    window.location.href = '/login';
+    window.location.href = '/login.html';
     return;
   }
   try {
@@ -31,7 +31,7 @@ if (API_BASE && !/^https?:\/\//i.test(API_BASE) && API_BASE !== 'http://localhos
     if (!res.ok) {
       localStorage.removeItem('boolub_token');
       localStorage.removeItem('boolub_user');
-      window.location.href = '/login';
+      window.location.href = '/login.html';
       return;
     }
   } catch (e) {
@@ -59,7 +59,7 @@ async function resilientFetch(path, options = {}) {
     if (res.status === 401) {
       localStorage.removeItem('boolub_token');
       localStorage.removeItem('boolub_user');
-      window.location.href = '/login';
+      window.location.href = '/login.html';
       return res;
     }
     return res;
@@ -72,7 +72,7 @@ async function resilientFetch(path, options = {}) {
       if (fallbackRes.status === 401) {
         localStorage.removeItem('boolub_token');
         localStorage.removeItem('boolub_user');
-        window.location.href = '/login';
+        window.location.href = '/login.html';
         return fallbackRes;
       }
       return fallbackRes;
@@ -86,7 +86,7 @@ async function resilientFetch(path, options = {}) {
 window.handleLogout = function() {
   localStorage.removeItem('boolub_token');
   localStorage.removeItem('boolub_user');
-  window.location.href = '/login';
+  window.location.href = '/login.html';
 };
 
 // Display logged-in user
