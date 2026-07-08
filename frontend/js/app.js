@@ -2751,7 +2751,7 @@ let compModalCurrentItem = null;
 window.openCompDetailModal = async function(idx) {
   const filter = elements.compStatusFilter.value;
   const sort = elements.compSortSelect.value;
-  let data = [...state.competitiveData];
+  let data = getFilteredCompetitiveData();
   if (filter !== 'all') data = data.filter(d => d.status === filter);
   switch (sort) {
     case 'gap-asc': data.sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity)); break;
