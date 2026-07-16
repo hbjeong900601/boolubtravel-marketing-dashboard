@@ -368,6 +368,18 @@ class NaverAdsAPI {
       return [];
     }
 
+    // 4-3. Single Ad GET/PUT Simulation
+    if (path.startsWith('/ncc/ads/')) {
+      const adId = path.split('/').pop();
+      console.log(`[SIMULATION] Single Ad ${adId} requested or updated.`);
+      return {
+        nccAdId: adId,
+        nccAdgroupId: 'grp-shop-01',
+        userLock: data ? data.userLock : false,
+        inspectStatus: 'APPROVED'
+      };
+    }
+
     // 5. Adjust Bid
     if (path.startsWith('/ncc/keywords/')) {
       const keywordId = path.split('/').pop();
