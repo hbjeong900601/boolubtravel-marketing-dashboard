@@ -270,14 +270,22 @@ app.post('/api/naver-ads/settings', (req, res) => {
   const { customerId, apiKey, apiSecret, licenseKey, naverOpenClientId, naverOpenClientSecret } = req.body;
   const prev = db.naverAdsSettings || {};
 
+  // Check if string contains masking characters (bullet or asterisk)
+  const isMasked = (val) => typeof val === 'string' && (val.includes('•') || val.includes('*'));
+
+  const finalApiKey = (apiKey !== undefined && !isMasked(apiKey)) ? apiKey : (prev.apiKey || '');
+  const finalApiSecret = (apiSecret !== undefined && !isMasked(apiSecret)) ? apiSecret : (prev.apiSecret || '');
+  const finalLicenseKey = (licenseKey !== undefined && !isMasked(licenseKey)) ? licenseKey : (prev.licenseKey || '');
+  const finalOpenClientSecret = (naverOpenClientSecret !== undefined && !isMasked(naverOpenClientSecret)) ? naverOpenClientSecret : (prev.naverOpenClientSecret || '');
+
   db.naverAdsSettings = {
     customerId: customerId !== undefined ? customerId : (prev.customerId || ''),
-    apiKey: apiKey !== undefined ? apiKey : (prev.apiKey || ''),
-    apiSecret: apiSecret !== undefined ? apiSecret : (prev.apiSecret || ''),
-    licenseKey: licenseKey !== undefined ? licenseKey : (prev.licenseKey || ''),
+    apiKey: finalApiKey,
+    apiSecret: finalApiSecret,
+    licenseKey: finalLicenseKey,
     naverOpenClientId: naverOpenClientId !== undefined ? naverOpenClientId : (prev.naverOpenClientId || ''),
-    naverOpenClientSecret: naverOpenClientSecret !== undefined ? naverOpenClientSecret : (prev.naverOpenClientSecret || ''),
-    isConnected: !!((customerId !== undefined ? customerId : prev.customerId) && (apiKey !== undefined ? apiKey : prev.apiKey) && (apiSecret !== undefined ? apiSecret : prev.apiSecret))
+    naverOpenClientSecret: finalOpenClientSecret,
+    isConnected: !!((customerId !== undefined ? customerId : prev.customerId) && finalApiKey && finalApiSecret)
   };
 
   saveDB(db);

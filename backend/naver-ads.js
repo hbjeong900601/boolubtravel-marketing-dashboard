@@ -92,13 +92,9 @@ class NaverAdsAPI {
       });
       return response.data;
     } catch (err) {
+      const errMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       console.error(`Naver Ad API Error [${method} ${path}]:`, err.response?.data || err.message);
-      if (method === 'GET') {
-        console.warn('Falling back to simulated data due to API error.');
-        return this.getMockResponse(method, path, queryParams, data);
-      } else {
-        throw new Error(err.response?.data?.message || err.response?.data?.error || err.message);
-      }
+      throw new Error(`Naver Ads API Error: ${errMsg}`);
     }
   }
 
