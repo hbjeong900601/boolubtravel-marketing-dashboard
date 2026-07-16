@@ -714,6 +714,11 @@
                   <span id="comp-select-count" style="font-weight:600; color:var(--color-secondary);">0개 선택됨</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <div style="display:flex; align-items:center; gap:6px; margin-right:12px; padding-right:12px; border-right:1px solid rgba(255,255,255,0.1);">
+                    <span style="color:rgba(255,255,255,0.6);">상태:</span>
+                    <button class="btn btn-sm" style="background:#10b981; color:white; height:28px; border:none; padding:0 12px; font-weight:bold;" onclick="toggleSelectedCompAds(false)">ON</button>
+                    <button class="btn btn-sm" style="background:#ef4444; color:white; height:28px; border:none; padding:0 12px; font-weight:bold;" onclick="toggleSelectedCompAds(true)">OFF</button>
+                  </div>
                   <span style="color:rgba(255,255,255,0.6);">선택 소재 CPC 일괄 조정:</span>
                   <button class="btn btn-secondary btn-sm" onclick="adjustSelectedCompCpc(-50)">-50원</button>
                   <button class="btn btn-secondary btn-sm" onclick="adjustSelectedCompCpc(50)">+50원</button>

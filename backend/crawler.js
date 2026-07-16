@@ -15,6 +15,19 @@ const TARGET_COMPETITORS = [
 ];
 
 /**
+ * Helper to check if a parsed product name somewhat matches the search keyword.
+ * This prevents totally unrelated products from being falsely identified as competitors.
+ */
+function isProductMatch(keyword, prodName) {
+  if (!prodName) return true;
+  const keywordTokens = keyword.split(/\s+/).filter(t => t.length > 1);
+  if (keywordTokens.length === 0) return true;
+  const lowerProdName = prodName.toLowerCase();
+  // Ensure at least one meaningful keyword token is present in the product name
+  return keywordTokens.some(token => lowerProdName.includes(token.toLowerCase()));
+}
+
+/**
  * Scrapes Naver Shopping and extracts competitor prices.
  * @param {string} keyword The search query keyword
  * @param {number} [price] The product's actual price for realistic mock scaling
@@ -53,7 +66,7 @@ async function scrapeNaverShopping(keyword, price, catalogId, openClientId, open
             price: itemPrice,
             url: item.link
           };
-        }).filter(c => c.price > 0);
+        }).filter(c => c.price > 0 && isProductMatch(keyword, c.productName));
 
         if (competitors.length > 0) {
           console.log(`Naver Open API returned ${competitors.length} real shopping search results!`);
@@ -210,7 +223,7 @@ async function scrapeNaverShopping(keyword, price, catalogId, openClientId, open
                          lowerMall.includes('klook') || lowerMall.includes('클룩') || lowerMall.includes('waug') || lowerMall.includes('와그') ||
                          lowerMall.includes('kkday') || lowerMall.includes('야놀자') || lowerMall.includes('마이리얼');
         
-        if (isTarget && !seenMalls.has(c.mall)) {
+        if (isTarget && isProductMatch(keyword, c.productName) && !seenMalls.has(c.mall)) {
           seenMalls.add(c.mall);
           matchedCompetitors.push({
             name: c.mall,

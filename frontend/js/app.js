@@ -324,11 +324,72 @@ function setupEventListeners() {
 
   // Apply Bidding Strategy to Simulator
   if (elements.applyStrategyBidBtn) {
-    elements.applyStrategyBidBtn.addEventListener('click', applyStrategyToSimulator);
+  elements.applyStrategyBidBtn.addEventListener('click', applyStrategyToSimulator);
   }
 
   // Keyword Search Tool
   elements.keywordSearchBtn.addEventListener('click', handleKeywordSearch);
+  // Setup keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeCompDetailModal();
+    }
+  });
+
+  // --- Competitive Ad Toggle Logic ---
+  window.toggleCompAd = async function(adId, newState) {
+    try {
+      const res = await resilientFetch('/api/naver-ads/toggle-ad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adId, userLock: newState })
+      });
+      if (!res.ok) throw new Error('API request failed');
+      
+      // Update local state
+      const item = state.competitiveData.find(d => d.adId === adId);
+      if (item) {
+        item.userLock = newState;
+      }
+      renderCompetitiveTable();
+      showToast(`소재가 ${newState ? 'OFF' : 'ON'} 되었습니다.`);
+    } catch (err) {
+      alert('소재 상태 변경 실패: ' + err.message);
+    }
+  };
+
+  window.toggleSelectedCompAds = async function(newState) {
+    const checkboxes = document.querySelectorAll('.comp-kw-checkbox:checked');
+    if (checkboxes.length === 0) return alert('상태를 변경할 소재를 선택하세요.');
+    if (!confirm(`선택한 ${checkboxes.length}개 소재를 모두 ${newState ? 'OFF' : 'ON'} 하시겠습니까?`)) return;
+
+    const originalText = document.getElementById('comp-select-count').innerText;
+    document.getElementById('comp-select-count').innerText = '상태 변경 중...';
+    
+    let successCount = 0;
+    for (const cb of checkboxes) {
+      const adId = cb.dataset.adId;
+      try {
+        const res = await resilientFetch('/api/naver-ads/toggle-ad', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adId, userLock: newState })
+        });
+        if (res.ok) {
+          const item = state.competitiveData.find(d => d.adId === adId);
+          if (item) item.userLock = newState;
+          successCount++;
+        }
+      } catch (e) {
+        console.warn('Failed to toggle ad', adId, e);
+      }
+    }
+
+    document.getElementById('comp-select-count').innerText = originalText;
+    renderCompetitiveTable();
+    showToast(`${successCount}개 소재가 ${newState ? 'OFF' : 'ON'} 되었습니다.`);
+  };
+
   elements.keywordSearchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleKeywordSearch();
   });
@@ -2425,13 +2486,13 @@ async function runCompetitiveScan(isAuto = false) {
         // Filter: only scan active (ELIGIBLE/APPROVED, not locked) ads
         const eligibleAds = ads.filter(ad => {
           const statusOk = !ad.inspectStatus || ad.inspectStatus === 'ELIGIBLE' || ad.inspectStatus === 'APPROVED';
-          return statusOk && ad.userLock !== true && ad.useYn !== 'N';
+          return statusOk && ad.useYn !== 'N';
         });
         for (const ad of eligibleAds) {
           const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
           const price = parseInt(ad.referenceData?.price, 10) || parseInt(ad.referenceData?.lowPrice, 10) || parseInt(ad.adAttr?.price, 10) || 0;
           if (adName && price > 0) {
-            allAds.push({ adId: ad.nccAdId, adName, price, campaignId: campaign.nccCampaignId, campaignName: campaign.name, adgroupId: ag.nccAdgroupId, adgroupName: ag.name, referenceData: ad.referenceData });
+            allAds.push({ adId: ad.nccAdId, adName, price, userLock: !!ad.userLock, campaignId: campaign.nccCampaignId, campaignName: campaign.name, adgroupId: ag.nccAdgroupId, adgroupName: ag.name, referenceData: ad.referenceData });
           }
         }
       }
@@ -2588,7 +2649,7 @@ async function runGroupCompetitiveScan() {
     // Filter: only scan active (ELIGIBLE/APPROVED, not locked) ads
     const ads = rawAds.filter(ad => {
       const statusOk = !ad.inspectStatus || ad.inspectStatus === 'ELIGIBLE' || ad.inspectStatus === 'APPROVED';
-      return statusOk && ad.userLock !== true && ad.useYn !== 'N';
+      return statusOk && ad.useYn !== 'N';
     });
 
     const allAds = [];
@@ -2596,7 +2657,7 @@ async function runGroupCompetitiveScan() {
       const adName = ad.adAttr?.displayProductName || ad.referenceData?.productTitle || ad.referenceData?.productName || ad.referenceData?.mallProductName || ad.adName || '';
       const price = parseInt(ad.referenceData?.price, 10) || parseInt(ad.referenceData?.lowPrice, 10) || parseInt(ad.adAttr?.price, 10) || 0;
       if (adName && price > 0) {
-        allAds.push({ adId: ad.nccAdId, adName, price, campaignId, campaignName, adgroupId, adgroupName, referenceData: ad.referenceData, adBidAmt: ad.adAttr?.bidAmt || 0, useGroupBidAmt: ad.adAttr?.useGroupBidAmt });
+        allAds.push({ adId: ad.nccAdId, adName, price, userLock: !!ad.userLock, campaignId, campaignName, adgroupId, adgroupName, referenceData: ad.referenceData, adBidAmt: ad.adAttr?.bidAmt || 0, useGroupBidAmt: ad.adAttr?.useGroupBidAmt });
       }
     }
 
@@ -2621,7 +2682,7 @@ async function runGroupCompetitiveScan() {
         const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
         const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
         const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
-        state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: (ad.useGroupBidAmt ? groupBidAmt : ad.adBidAmt) || groupBidAmt });
+        state.competitiveData.push({ adId: ad.adId, userLock: ad.userLock, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: (ad.useGroupBidAmt ? groupBidAmt : ad.adBidAmt) || groupBidAmt });
       } catch (err) { console.warn(`Scan failed for ${ad.adName}:`, err.message); }
       if (i < total - 1) await new Promise(r => setTimeout(r, 300));
     }
@@ -2727,7 +2788,10 @@ function renderCompetitiveTable() {
           <button class="btn btn-naver btn-sm" style="padding:2px 5px; font-size:10px; height:24px; white-space:nowrap;" onclick="saveCompCpcToServer('${item.adId}')">전송</button>
         </div>
       </td>
-      <td style="text-align:center;"><button class="btn-detail-action" onclick="openCompDetailModal(${idx})" style="font-size:11px; padding:4px 10px;">상세</button></td>
+      <td style="text-align:center;">
+        <button class="btn-detail-action" onclick="openCompDetailModal(${idx})" style="font-size:11px; padding:4px 8px; margin-bottom:4px; display:block; width:100%;">상세</button>
+        <button class="btn-detail-action" onclick="toggleCompAd('${item.adId}', ${!item.userLock})" style="font-size:11px; padding:4px 8px; display:block; width:100%; background:${item.userLock ? '#ef4444' : '#10b981'}; color:white; border:none;">${item.userLock ? 'OFF' : 'ON'}</button>
+      </td>
     </tr>`;
   }).join('');
   renderCompetitiveAlertBanner();
