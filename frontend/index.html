@@ -170,14 +170,14 @@
           </div>
           <div class="card">
             <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
-              <h3 class="card-title">광고 그룹별 지출 비중</h3>
-              <div class="adgroup-filter-controls" style="display:flex; align-items:center; gap:4px;">
-                <button class="btn btn-secondary btn-sm active" id="btn-adgroup-today" onclick="filterAdGroupDonut('today')" style="padding:2px 8px; font-size:10px; height:24px;">당일</button>
-                <button class="btn btn-secondary btn-sm" id="btn-adgroup-yesterday" onclick="filterAdGroupDonut('yesterday')" style="padding:2px 8px; font-size:10px; height:24px;">전날</button>
+              <h3 class="card-title">캠페인별 지출 비중</h3>
+              <div class="campaign-filter-controls" style="display:flex; align-items:center; gap:4px;">
+                <button class="btn btn-secondary btn-sm active" id="btn-campaign-today" onclick="filterCampaignDonut('today')" style="padding:2px 8px; font-size:10px; height:24px;">당일</button>
+                <button class="btn btn-secondary btn-sm" id="btn-campaign-yesterday" onclick="filterCampaignDonut('yesterday')" style="padding:2px 8px; font-size:10px; height:24px;">전날</button>
               </div>
             </div>
             <div style="position: relative; height: 260px; display: flex; justify-content: center; align-items: center; padding: 10px;">
-              <canvas id="adgroup-donut-chart" style="max-height: 240px; max-width: 240px;"></canvas>
+              <canvas id="campaign-donut-chart" style="max-height: 240px; max-width: 240px;"></canvas>
             </div>
           </div>
         </div>
@@ -1025,6 +1025,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=7.1"></script>
+  <script src="js/app.js?v=7.2"></script>
 </body>
 </html>

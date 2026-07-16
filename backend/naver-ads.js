@@ -166,12 +166,17 @@ class NaverAdsAPI {
     if (!current || !current.nccAdId) {
       throw new Error('Failed to fetch current ad data');
     }
-    // 2. Modify userLock and remove read-only fields
-    current.userLock = userLock;
-    delete current.editTm;
-    delete current.regTm;
-    // 3. PUT full updated object
-    return this.request('PUT', path, { fields: 'userLock' }, current);
+    
+    // 2. Construct clean payload for PUT request to avoid validation error
+    const payload = {
+      nccAdId: current.nccAdId,
+      nccAdgroupId: current.nccAdgroupId,
+      userLock: userLock,
+      inspectStatus: current.inspectStatus || 'APPROVED'
+    };
+    
+    // 3. PUT clean updated object - fields=userLock parameter is mandatory
+    return this.request('PUT', path, { fields: 'userLock' }, payload);
   }
 
   /**

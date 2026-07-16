@@ -113,10 +113,10 @@ let state = {
     competitor: null,
     competitive: null,
     donut: null,
-    adgroupDonut: null
+    campaignDonut: null
   },
   overviewChartRange: { type: '14d', start: null, end: null },
-  adgroupDonutFilter: 'today'
+  campaignDonutFilter: 'today'
 };
 
 // DOM Elements
@@ -364,7 +364,10 @@ function setupEventListeners() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adId, userLock: newState })
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'API request failed');
+      }
       
       // Update local state
       const item = state.competitiveData.find(d => d.adId === adId);
@@ -401,6 +404,9 @@ function setupEventListeners() {
           const item = state.competitiveData.find(d => d.adId === adId);
           if (item) item.userLock = newState;
           successCount++;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.warn(`Failed to toggle ad ${adId}:`, errData.error || 'API error');
         }
       } catch (e) {
         console.warn('Failed to toggle ad', adId, e);
@@ -643,10 +649,6 @@ async function fetchCampaigns() {
     state.campaigns = await res.json();
     populateCampaignDropdown();
     populateCompCampaignDropdown();
-    
-    // Background parallel load for all campaign adgroups
-    await fetchOverviewAdgroups();
-    updateOverviewKPIs();
   } catch (err) {
     console.error('Failed to fetch campaigns:', err);
   }
@@ -766,7 +768,7 @@ function updateOverviewKPIs() {
 
   // Render Advanced Dashboard Cards
   renderDonutChart(isRealConnection);
-  renderAdGroupDonutChart(isRealConnection);
+  renderCampaignDonutChart(isRealConnection);
   renderOverviewHighPriceTop3();
 }
 
@@ -3516,50 +3518,45 @@ window.showToast = function(message) {
   }, 2700);
 };
 
-window.renderAdGroupDonutChart = function(isRealConnection) {
-  const ctx = document.getElementById('adgroup-donut-chart');
+window.renderCampaignDonutChart = function(isRealConnection) {
+  const ctx = document.getElementById('campaign-donut-chart');
   if (!ctx) return;
 
   const data = {};
-  const filter = state.adgroupDonutFilter || 'today';
+  const filter = state.campaignDonutFilter || 'today';
   
-  const targetGroups = state.overviewAdgroups || [];
-  if (targetGroups.length > 0) {
-    targetGroups.forEach((g, idx) => {
-      let budget = g.bidAmt || 1000;
+  if (state.campaigns && state.campaigns.length > 0) {
+    state.campaigns.forEach((c, idx) => {
+      let budget = c.userLimitAmt || 100000;
       if (filter === 'yesterday') {
-        const variance = [1.15, 0.85, 0.9, 1.25, 0.95];
+        const variance = [0.9, 1.15, 0.85, 1.1, 0.95];
         const v = variance[idx % variance.length];
         budget = Math.round(budget * v);
       }
-      data[g.name] = (data[g.name] || 0) + budget;
+      data[c.name] = (data[c.name] || 0) + budget;
     });
   }
   
   if (Object.keys(data).length === 0) {
     if (filter === 'today') {
-      data['제주 패키지 상품군'] = 360000;
-      data['후쿠오카 료칸 상품군'] = 300000;
-      data['발리 허니문 상품군'] = 240000;
-      data['일본 로밍 이심 상품군'] = 180000;
-      data['기타 자유여행 상품군'] = 120000;
+      data['제주도 패키지 검색광고'] = 100000;
+      data['후쿠오카 온천 검색광고'] = 80000;
+      data['발리 패키지 검색광고'] = 50000;
     } else {
-      data['후쿠오카 료칸 상품군'] = 380000;
-      data['제주 패키지 상품군'] = 280000;
-      data['발리 허니문 상품군'] = 220000;
-      data['일본 로밍 이심 상품군'] = 190000;
-      data['기타 자유여행 상품군'] = 130000;
+      data['후쿠오카 온천 검색광고'] = 110000;
+      data['제주도 패키지 검색광고'] = 90000;
+      data['발리 패키지 검색광고'] = 45000;
     }
   }
 
   const labels = Object.keys(data);
   const values = Object.values(data);
 
-  if (state.charts.adgroupDonut) {
-    state.charts.adgroupDonut.destroy();
+  if (state.charts.campaignDonut) {
+    state.charts.campaignDonut.destroy();
   }
 
-  state.charts.adgroupDonut = new Chart(ctx, {
+  state.charts.campaignDonut = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: labels,
@@ -3599,11 +3596,11 @@ window.renderAdGroupDonutChart = function(isRealConnection) {
   });
 };
 
-window.filterAdGroupDonut = function(period) {
-  state.adgroupDonutFilter = period;
+window.filterCampaignDonut = function(period) {
+  state.campaignDonutFilter = period;
   
-  const todayBtn = document.getElementById('btn-adgroup-today');
-  const yesterdayBtn = document.getElementById('btn-adgroup-yesterday');
+  const todayBtn = document.getElementById('btn-campaign-today');
+  const yesterdayBtn = document.getElementById('btn-campaign-yesterday');
   
   if (todayBtn && yesterdayBtn) {
     if (period === 'today') {
@@ -3616,28 +3613,7 @@ window.filterAdGroupDonut = function(period) {
   }
   
   const isRealConnection = state.settings && state.settings.isConnected;
-  renderAdGroupDonutChart(isRealConnection);
-};
-
-window.fetchOverviewAdgroups = async function() {
-  try {
-    const list = [];
-    if (!state.campaigns || state.campaigns.length === 0) return;
-    
-    for (const camp of state.campaigns) {
-      const res = await resilientFetch(`/api/naver-ads/adgroups?campaignId=${camp.nccCampaignId}`);
-      if (res.ok) {
-        const groups = await res.json();
-        groups.forEach(g => {
-          g.campaignName = camp.name;
-          list.push(g);
-        });
-      }
-    }
-    state.overviewAdgroups = list;
-  } catch (err) {
-    console.error('Failed to fetch overview adgroups:', err);
-  }
+  renderCampaignDonutChart(isRealConnection);
 };
 
 
