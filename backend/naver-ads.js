@@ -190,14 +190,15 @@ class NaverAdsAPI {
       throw new Error('Failed to fetch current ad data');
     }
     
-    // 2. Construct clean payload containing ONLY nccAdId and userLock for fields=userLock update
+    // 2. Construct clean payload containing nccAdId, nccAdgroupId and userLock for fields=userLock update
     const payload = {
       nccAdId: current.nccAdId,
+      nccAdgroupId: current.nccAdgroupId,
       userLock: userLock
     };
     
-    // 3. PUT clean updated object - 소재 수정 URL은 '/ncc/ads' 이다! (adId 경로변수 없음)
-    const putPath = `/ncc/ads`;
+    // 3. PUT clean updated object - 소재 수정 URL은 '/ncc/ads/{adId}' 이다!
+    const putPath = `/ncc/ads/${adId}`;
     return this.request('PUT', putPath, { fields: 'userLock' }, payload);
   }
 

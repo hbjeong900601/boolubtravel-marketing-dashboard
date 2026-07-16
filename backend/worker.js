@@ -388,15 +388,16 @@ export default {
       if (path === '/api/naver-ads/toggle-ad' && request.method === 'POST') {
         const db = await getDB(env);
         const { adId, userLock } = await request.json();
-        // Naver API requires full ad object for PUT
+        // Naver API requires clean ad object for fields=userLock PUT update
         const current = await proxyNaverAds('GET', `/ncc/ads/${adId}`, {}, null, db.naverAdsSettings);
         if (!current || !current.nccAdId) {
           return jsonResponse({ error: 'Failed to fetch current ad data' }, 400);
         }
-        current.userLock = userLock;
-        delete current.editTm;
-        delete current.regTm;
-        const data = await proxyNaverAds('PUT', `/ncc/ads/${adId}`, {}, current, db.naverAdsSettings);
+        const data = await proxyNaverAds('PUT', `/ncc/ads/${adId}`, { fields: 'userLock' }, {
+          nccAdId: adId,
+          nccAdgroupId: current.nccAdgroupId,
+          userLock: userLock
+        }, db.naverAdsSettings);
         return jsonResponse(data, 200);
       }
 
@@ -736,8 +737,8 @@ async function proxyNaverAds(method, path, queryParams, body, settings) {
 
     return await res.json();
   } catch (err) {
-    console.warn(`Worker real Naver Ads call failed: ${err.message}. Falling back to mock data.`);
-    return getMockResponse(method, path, queryParams, body);
+    console.error(`Worker real Naver Ads call failed [${method} ${path}]:`, err.message);
+    throw err;
   }
 }
 
