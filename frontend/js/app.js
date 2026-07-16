@@ -377,6 +377,7 @@ function setupEventListeners() {
       renderCompetitiveTable();
       renderOverviewHighPriceTop3();
       renderOverviewInsights();
+      saveCompetitiveDataToCache();
       showToast(`소재가 ${newState ? 'OFF' : 'ON'} 되었습니다.`);
     } catch (err) {
       alert('소재 상태 변경 실패: ' + err.message);
@@ -417,6 +418,7 @@ function setupEventListeners() {
     renderCompetitiveTable();
     renderOverviewHighPriceTop3();
     renderOverviewInsights();
+    saveCompetitiveDataToCache();
     showToast(`${successCount}개 소재가 ${newState ? 'OFF' : 'ON'} 되었습니다.`);
   };
 

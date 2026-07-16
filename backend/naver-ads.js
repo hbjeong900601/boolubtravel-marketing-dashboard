@@ -175,12 +175,10 @@ class NaverAdsAPI {
       throw new Error('Failed to fetch current ad data');
     }
     
-    // 2. Construct clean payload for PUT request to avoid validation error
+    // 2. Construct clean payload containing ONLY nccAdId and userLock for fields=userLock update
     const payload = {
       nccAdId: current.nccAdId,
-      nccAdgroupId: current.nccAdgroupId,
-      userLock: userLock,
-      inspectStatus: current.inspectStatus || 'APPROVED'
+      userLock: userLock
     };
     
     // 3. PUT clean updated object - 소재 수정 URL은 '/ncc/ads' 이다! (adId 경로변수 없음)
