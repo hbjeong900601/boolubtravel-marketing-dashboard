@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 // Naver Search Ad API base URL
 const NAVER_API_BASE_URL = 'https://api.searchad.naver.com';
@@ -51,7 +53,24 @@ class NaverAdsAPI {
   }
 
   getCredentials() {
-    const settings = this.db.naverAdsSettings || {};
+    try {
+      const dbPath = path.join(__dirname, 'database.json');
+      if (fs.existsSync(dbPath)) {
+        const raw = fs.readFileSync(dbPath, 'utf8');
+        const dbObj = JSON.parse(raw);
+        const settings = dbObj.naverAdsSettings || {};
+        return {
+          apiKey: settings.apiKey || process.env.NAVER_API_KEY,
+          apiSecret: settings.apiSecret || process.env.NAVER_API_SECRET,
+          customerId: settings.customerId || process.env.NAVER_CUSTOMER_ID,
+          licenseKey: settings.licenseKey || process.env.NAVER_LICENSE_KEY
+        };
+      }
+    } catch (err) {
+      console.error('Failed to read live settings from database.json:', err);
+    }
+
+    const settings = (this.db && this.db.naverAdsSettings) || {};
     return {
       apiKey: settings.apiKey || process.env.NAVER_API_KEY,
       apiSecret: settings.apiSecret || process.env.NAVER_API_SECRET,
