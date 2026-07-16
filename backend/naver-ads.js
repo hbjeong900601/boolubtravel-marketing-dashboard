@@ -85,9 +85,12 @@ class NaverAdsAPI {
       return response.data;
     } catch (err) {
       console.error(`Naver Ad API Error [${method} ${path}]:`, err.response?.data || err.message);
-      // Fallback to mock if API returns error (e.g. invalid key) to keep dashboard responsive
-      console.warn('Falling back to simulated data due to API error.');
-      return this.getMockResponse(method, path, queryParams, data);
+      if (method === 'GET') {
+        console.warn('Falling back to simulated data due to API error.');
+        return this.getMockResponse(method, path, queryParams, data);
+      } else {
+        throw new Error(err.response?.data?.message || err.response?.data?.error || err.message);
+      }
     }
   }
 
@@ -148,7 +151,7 @@ class NaverAdsAPI {
     delete current.targetSummary;
     delete current.expectCost;
     // 3. PUT full updated object
-    return this.request('PUT', path, {}, current);
+    return this.request('PUT', path, { fields: 'bidAmt' }, current);
   }
 
   /**
@@ -168,7 +171,7 @@ class NaverAdsAPI {
     delete current.editTm;
     delete current.regTm;
     // 3. PUT full updated object
-    return this.request('PUT', path, {}, current);
+    return this.request('PUT', path, { fields: 'userLock' }, current);
   }
 
   /**

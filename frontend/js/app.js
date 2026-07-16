@@ -643,6 +643,10 @@ async function fetchCampaigns() {
     state.campaigns = await res.json();
     populateCampaignDropdown();
     populateCompCampaignDropdown();
+    
+    // Background parallel load for all campaign adgroups
+    await fetchOverviewAdgroups();
+    updateOverviewKPIs();
   } catch (err) {
     console.error('Failed to fetch campaigns:', err);
   }
@@ -3519,8 +3523,9 @@ window.renderAdGroupDonutChart = function(isRealConnection) {
   const data = {};
   const filter = state.adgroupDonutFilter || 'today';
   
-  if (isRealConnection && state.adgroups && state.adgroups.length > 0) {
-    state.adgroups.forEach((g, idx) => {
+  const targetGroups = state.overviewAdgroups || [];
+  if (targetGroups.length > 0) {
+    targetGroups.forEach((g, idx) => {
       let budget = g.bidAmt || 1000;
       if (filter === 'yesterday') {
         const variance = [1.15, 0.85, 0.9, 1.25, 0.95];
@@ -3612,6 +3617,27 @@ window.filterAdGroupDonut = function(period) {
   
   const isRealConnection = state.settings && state.settings.isConnected;
   renderAdGroupDonutChart(isRealConnection);
+};
+
+window.fetchOverviewAdgroups = async function() {
+  try {
+    const list = [];
+    if (!state.campaigns || state.campaigns.length === 0) return;
+    
+    for (const camp of state.campaigns) {
+      const res = await resilientFetch(`/api/naver-ads/adgroups?campaignId=${camp.nccCampaignId}`);
+      if (res.ok) {
+        const groups = await res.json();
+        groups.forEach(g => {
+          g.campaignName = camp.name;
+          list.push(g);
+        });
+      }
+    }
+    state.overviewAdgroups = list;
+  } catch (err) {
+    console.error('Failed to fetch overview adgroups:', err);
+  }
 };
 
 
