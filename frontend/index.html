@@ -94,29 +94,29 @@
         <!-- KPI Row -->
         <div class="grid-cols-4">
           <div class="card kpi-card secondary">
-            <div class="kpi-label">총 마케팅 예산</div>
-            <div class="kpi-value" id="kpi-total-budget">₩1,000,000</div>
-            <div class="kpi-sub">월간 할당 예산 기준</div>
+            <div class="kpi-label">이번 달 총 마케팅 비용</div>
+            <div class="kpi-value" id="kpi-total-budget">₩0</div>
+            <div class="kpi-sub">당월 누적 소진액</div>
           </div>
           <div class="card kpi-card warning">
-            <div class="kpi-label">누적 소진 금액</div>
-            <div class="kpi-value" id="kpi-spent">₩462,800</div>
+            <div class="kpi-label">일일 누적 소진 금액</div>
+            <div class="kpi-value" id="kpi-spent">₩0</div>
             <div class="kpi-sub">
-              소진율 <span class="trend-up" id="kpi-spent-percent" style="font-weight: 700; margin-left: 2px;">46.3%</span>
+              오늘 소진율 <span class="trend-up" id="kpi-spent-percent" style="font-weight: 700; margin-left: 2px;">0%</span>
             </div>
           </div>
           <div class="card kpi-card naver">
-            <div class="kpi-label">총 클릭 수 (Clicks)</div>
-            <div class="kpi-value" id="kpi-clicks">382 Clicks</div>
+            <div class="kpi-label">일일 총 클릭 수</div>
+            <div class="kpi-value" id="kpi-clicks">0 Clicks</div>
             <div class="kpi-sub">
-              평균 CTR <span class="trend-up" style="font-weight: 700; margin-left: 2px;">1.84%</span>
+              오늘 평균 CTR <span class="trend-up" id="kpi-ctr-value" style="font-weight: 700; margin-left: 2px;">0%</span>
             </div>
           </div>
           <div class="card kpi-card violet">
-            <div class="kpi-label">예상 ROAS (광고수익률)</div>
-            <div class="kpi-value" id="kpi-roas">342%</div>
+            <div class="kpi-label">이번주 구매 전환 수</div>
+            <div class="kpi-value" id="kpi-conversions">0건</div>
             <div class="kpi-sub">
-              전주 대비 <span class="trend-up">▲ 14.2%</span>
+              전주 대비 <span class="trend-up" id="kpi-conv-trend">▲ 0%</span>
             </div>
           </div>
         </div>
@@ -962,6 +962,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=6.5"></script>
+  <script src="js/app.js?v=6.6"></script>
 </body>
 </html>
