@@ -40,6 +40,14 @@ function generateNaverHeaders(method, path, credentials) {
 class NaverAdsAPI {
   constructor(db) {
     this.db = db;
+    // In-memory simulation database for shopping ads to preserve toggle state across requests
+    this.mockAdsStore = {
+      'ad-shop-001': { nccAdId: 'ad-shop-001', nccAdgroupId: 'grp-shop-01', name: '발리 풀빌라 5일 허니문 패키지', referenceData: { productName: '발리 풀빌라 5일 허니문 패키지', lowPrice: '1200000' }, inspectStatus: 'APPROVED', userLock: false },
+      'ad-shop-002': { nccAdId: 'ad-shop-002', nccAdgroupId: 'grp-shop-01', name: '발리 스냅 촬영 포함 커플 투어 6일', referenceData: { productName: '발리 스냅 촬영 포함 커플 투어 6일', lowPrice: '850000' }, inspectStatus: 'APPROVED', userLock: false },
+      'ad-shop-003': { nccAdId: 'ad-shop-003', nccAdgroupId: 'grp-shop-02', name: '후쿠오카 유후인 온천 료칸 3일', referenceData: { productName: '후쿠오카 유후인 온천 료칸 3일', lowPrice: '450000' }, inspectStatus: 'APPROVED', userLock: false },
+      'ad-shop-004': { nccAdId: 'ad-shop-004', nccAdgroupId: 'grp-shop-02', name: '후쿠오카 도심 세미더블 패키지', referenceData: { productName: '후쿠오카 도심 세미더블 패키지', lowPrice: '380000' }, inspectStatus: 'APPROVED', userLock: false },
+      'ad-shop-005': { nccAdId: 'ad-shop-005', nccAdgroupId: 'grp-shop-03', name: '일본 매일 2GB 로밍 데이터 이심(eSIM)', referenceData: { productName: '일본 매일 2GB 로밍 데이터 이심(eSIM)', lowPrice: '14500' }, inspectStatus: 'APPROVED', userLock: false }
+    };
   }
 
   getCredentials() {
@@ -160,9 +168,9 @@ class NaverAdsAPI {
    * Naver API requires the full ad object for PUT updates.
    */
   async toggleAd(adId, userLock) {
-    const path = `/ncc/ads/${adId}`;
+    const getPath = `/ncc/ads/${adId}`;
     // 1. Get current full ad object
-    const current = await this.request('GET', path);
+    const current = await this.request('GET', getPath);
     if (!current || !current.nccAdId) {
       throw new Error('Failed to fetch current ad data');
     }
@@ -175,8 +183,9 @@ class NaverAdsAPI {
       inspectStatus: current.inspectStatus || 'APPROVED'
     };
     
-    // 3. PUT clean updated object - fields=userLock parameter is mandatory
-    return this.request('PUT', path, { fields: 'userLock' }, payload);
+    // 3. PUT clean updated object - 소재 수정 URL은 '/ncc/ads' 이다! (adId 경로변수 없음)
+    const putPath = `/ncc/ads`;
+    return this.request('PUT', putPath, { fields: 'userLock' }, payload);
   }
 
   /**
@@ -357,33 +366,44 @@ class NaverAdsAPI {
 
     // 4-2. Ads (Shopping Materials)
     if (path === '/ncc/ads') {
-      const grpId = queryParams.nccAdgroupId;
-      if (grpId === 'grp-shop-01') {
-        return [
-          { nccAdId: 'ad-shop-001', nccAdgroupId: grpId, name: '발리 풀빌라 5일 허니문 패키지', referenceData: { productName: '발리 풀빌라 5일 허니문 패키지', lowPrice: '1200000' }, inspectStatus: 'APPROVED', useYn: 'Y' },
-          { nccAdId: 'ad-shop-002', nccAdgroupId: grpId, name: '발리 스냅 촬영 포함 커플 투어 6일', referenceData: { productName: '발리 스냅 촬영 포함 커플 투어 6일', lowPrice: '850000' }, inspectStatus: 'APPROVED', useYn: 'Y' }
-        ];
-      } else if (grpId === 'grp-shop-02') {
-        return [
-          { nccAdId: 'ad-shop-003', nccAdgroupId: grpId, name: '후쿠오카 유후인 온천 료칸 3일', referenceData: { productName: '후쿠오카 유후인 온천 료칸 3일', lowPrice: '450000' }, inspectStatus: 'APPROVED', useYn: 'Y' },
-          { nccAdId: 'ad-shop-004', nccAdgroupId: grpId, name: '후쿠오카 도심 세미더블 패키지', referenceData: { productName: '후쿠오카 도심 세미더블 패키지', lowPrice: '380000' }, inspectStatus: 'APPROVED', useYn: 'Y' }
-        ];
-      } else if (grpId === 'grp-shop-03') {
-        return [
-          { nccAdId: 'ad-shop-005', nccAdgroupId: grpId, name: '일본 매일 2GB 로밍 데이터 이심(eSIM)', referenceData: { productName: '일본 매일 2GB 로밍 데이터 이심(eSIM)', lowPrice: '14500' }, inspectStatus: 'APPROVED', useYn: 'Y' }
-        ];
+      if (method === 'PUT') {
+        const payload = data || {};
+        const adId = payload.nccAdId;
+        console.log(`[SIMULATION] Updating Mock Ad ${adId} userLock to ${payload.userLock}`);
+        if (this.mockAdsStore[adId]) {
+          this.mockAdsStore[adId].userLock = payload.userLock;
+          return this.mockAdsStore[adId];
+        }
+        return { result: 'SUCCESS_SIMULATED', userLock: payload.userLock };
       }
-      return [];
+      
+      const grpId = queryParams.nccAdgroupId;
+      const allAds = Object.values(this.mockAdsStore);
+      return allAds.filter(ad => ad.nccAdgroupId === grpId);
     }
 
     // 4-3. Single Ad GET/PUT Simulation
     if (path.startsWith('/ncc/ads/')) {
       const adId = path.split('/').pop();
-      console.log(`[SIMULATION] Single Ad ${adId} requested or updated.`);
+      if (method === 'PUT') {
+        const payload = data || {};
+        console.log(`[SIMULATION] Updating Mock Ad ${adId} userLock to ${payload.userLock}`);
+        if (this.mockAdsStore[adId]) {
+          this.mockAdsStore[adId].userLock = payload.userLock;
+          return this.mockAdsStore[adId];
+        }
+        return { result: 'SUCCESS_SIMULATED', userLock: payload.userLock };
+      }
+      
+      console.log(`[SIMULATION] Single Ad ${adId} requested.`);
+      const existing = this.mockAdsStore[adId];
+      if (existing) {
+        return existing;
+      }
       return {
         nccAdId: adId,
         nccAdgroupId: 'grp-shop-01',
-        userLock: data ? data.userLock : false,
+        userLock: false,
         inspectStatus: 'APPROVED'
       };
     }
