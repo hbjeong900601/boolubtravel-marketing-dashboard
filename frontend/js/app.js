@@ -112,7 +112,8 @@ let state = {
     overview: null,
     competitor: null,
     competitive: null,
-    donut: null
+    donut: null,
+    adgroupDonut: null
   },
   overviewChartRange: { type: '14d', start: null, end: null }
 };
@@ -760,6 +761,7 @@ function updateOverviewKPIs() {
 
   // Render Advanced Dashboard Cards
   renderDonutChart(isRealConnection);
+  renderAdGroupDonutChart(isRealConnection);
   renderOverviewHighPriceTop3();
 }
 
@@ -3479,4 +3481,102 @@ window.renderOverviewHighPriceTop3 = function() {
     `;
   }).join('');
 };
+
+window.showToast = function(message) {
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" style="width:16px; height:16px; color:var(--color-secondary);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <span>${message}</span>
+  `;
+  container.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.animation = 'toast-fade-out 0.3s ease forwards';
+    setTimeout(() => {
+      toast.remove();
+      if (container.childNodes.length === 0) {
+        container.remove();
+      }
+    }, 300);
+  }, 2700);
+};
+
+window.renderAdGroupDonutChart = function(isRealConnection) {
+  const ctx = document.getElementById('adgroup-donut-chart');
+  if (!ctx) return;
+
+  const data = {};
+  
+  if (isRealConnection && state.adgroups && state.adgroups.length > 0) {
+    state.adgroups.forEach(g => {
+      const budget = g.bidAmt || 1000;
+      data[g.name] = (data[g.name] || 0) + budget;
+    });
+  }
+  
+  if (Object.keys(data).length === 0) {
+    data['제주 패키지 상품군'] = 360000;
+    data['후쿠오카 료칸 상품군'] = 300000;
+    data['발리 허니문 상품군'] = 240000;
+    data['일본 로밍 이심 상품군'] = 180000;
+    data['기타 자유여행 상품군'] = 120000;
+  }
+
+  const labels = Object.keys(data);
+  const values = Object.values(data);
+
+  if (state.charts.adgroupDonut) {
+    state.charts.adgroupDonut.destroy();
+  }
+
+  state.charts.adgroupDonut = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: ['#4f46e5', '#03C75A', '#8b5cf6', '#06b6d4', '#f59e0b'],
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#9ca3af',
+            font: { family: 'Outfit', size: 10 },
+            padding: 8,
+            boxWidth: 12
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const value = context.raw;
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const percent = ((value / total) * 100).toFixed(1);
+              return `${context.label}: ₩${value.toLocaleString()} (${percent}%)`;
+            }
+          }
+        }
+      },
+      cutout: '65%'
+    }
+  });
+};
+
 

@@ -158,8 +158,8 @@
           </div>
         </div>
 
-        <div class="grid-main-layout" style="margin-top: 16px;">
-          <!-- Left: Donut Chart -->
+        <div class="grid-cols-2" style="margin-top: 16px;">
+          <!-- Left: Donut Chart (Ad Types) -->
           <div class="card">
             <div class="card-header">
               <h3 class="card-title">광고 유형별 지출 비중</h3>
@@ -168,32 +168,42 @@
               <canvas id="donut-chart" style="max-height: 240px; max-width: 240px;"></canvas>
             </div>
           </div>
-          <!-- Right: Disadvantage Top 3 Mini Board -->
+          <!-- Right: Ad Group Donut Chart (New) -->
           <div class="card">
             <div class="card-header">
-              <h3 class="card-title" style="color: #ff5252; display: flex; align-items: center; gap: 6px;">
-                <svg xmlns="http://www.w3.org/2000/svg" style="width:16px; height:16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                즉각 대응 필요 가격 열위 Top 3
-              </h3>
+              <h3 class="card-title">광고 그룹별 지출 비중</h3>
             </div>
-            <div class="table-container" style="padding: 8px 16px;">
-              <table style="font-size: 12px; border-collapse: collapse; width: 100%;">
-                <thead>
-                  <tr>
-                    <th>상품명</th>
-                    <th>자사 가격</th>
-                    <th>경쟁사 최저가</th>
-                    <th>가격 격차</th>
-                    <th>액션</th>
-                  </tr>
-                </thead>
-                <tbody id="overview-disadvantage-top3-body">
-                  <tr><td colspan="5" style="text-align:center; opacity:0.5; padding:40px;">경쟁력 분석 스캔을 실행해 주세요.</td></tr>
-                </tbody>
-              </table>
+            <div style="position: relative; height: 260px; display: flex; justify-content: center; align-items: center; padding: 10px;">
+              <canvas id="adgroup-donut-chart" style="max-height: 240px; max-width: 240px;"></canvas>
             </div>
+          </div>
+        </div>
+
+        <!-- Full Width: Disadvantage Top 3 Mini Board -->
+        <div class="card" style="margin-top: 16px; margin-bottom: 16px;">
+          <div class="card-header">
+            <h3 class="card-title" style="color: #ff5252; display: flex; align-items: center; gap: 6px;">
+              <svg xmlns="http://www.w3.org/2000/svg" style="width:16px; height:16px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              즉각 대응 필요 가격 열위 Top 3
+            </h3>
+          </div>
+          <div class="table-container" style="padding: 0 8px;">
+            <table style="font-size: 13px; border-collapse: collapse; width: 100%;">
+              <thead>
+                <tr>
+                  <th style="padding: 10px 16px;">상품명</th>
+                  <th style="padding: 10px 16px;">자사 판매가</th>
+                  <th style="padding: 10px 16px;">경쟁사 최저가</th>
+                  <th style="padding: 10px 16px;">가격 격차</th>
+                  <th style="padding: 10px 16px; text-align: center; width: 120px;">액션</th>
+                </tr>
+              </thead>
+              <tbody id="overview-disadvantage-top3-body">
+                <tr><td colspan="5" style="text-align:center; opacity:0.5; padding:30px;">경쟁력 분석 스캔을 실행해 주세요.</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -1012,6 +1022,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=6.8"></script>
+  <script src="js/app.js?v=6.9"></script>
 </body>
 </html>
