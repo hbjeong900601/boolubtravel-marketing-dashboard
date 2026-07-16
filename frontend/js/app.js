@@ -111,8 +111,10 @@ let state = {
   charts: {
     overview: null,
     competitor: null,
-    competitive: null
-  }
+    competitive: null,
+    donut: null
+  },
+  overviewChartRange: { type: '14d', start: null, end: null }
 };
 
 // DOM Elements
@@ -335,6 +337,22 @@ function setupEventListeners() {
       closeCompDetailModal();
     }
   });
+
+  // Set default dates for overview chart
+  const startEl = document.getElementById('chart-start-date');
+  const endEl = document.getElementById('chart-end-date');
+  if (startEl && endEl) {
+    const now = new Date();
+    const start = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000);
+    const formatDate = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const date = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${date}`;
+    };
+    startEl.value = formatDate(start);
+    endEl.value = formatDate(now);
+  }
 
   // --- Competitive Ad Toggle Logic ---
   window.toggleCompAd = async function(adId, newState) {
@@ -735,6 +753,10 @@ function updateOverviewKPIs() {
 
   // Render Chart
   updateOverviewChart(isRealConnection, activeDailyBudgetSum, dailySpent, dailyClicks);
+
+  // Render Advanced Dashboard Cards
+  renderDonutChart(isRealConnection);
+  renderOverviewHighPriceTop3();
 }
 
 function updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount) {
@@ -746,17 +768,43 @@ function updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, c
   const baseSpend = spentAmt || 48500;
   const baseClicks = clicksCount || 42;
   
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+  const range = state.overviewChartRange || { type: '14d' };
+  let dayCount = 14;
+  let customStartDate = null;
+  
+  if (range.type === '7d') {
+    dayCount = 7;
+  } else if (range.type === '14d') {
+    dayCount = 14;
+  } else if (range.type === 'month') {
+    // 이번 달 1일부터 오늘까지
+    dayCount = now.getDate();
+  } else if (range.type === 'custom' && range.start && range.end) {
+    const start = new Date(range.start);
+    const end = new Date(range.end);
+    const diffTime = Math.abs(end - start);
+    dayCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    customStartDate = start;
+  }
+
+  for (let i = dayCount - 1; i >= 0; i--) {
+    let d;
+    if (range.type === 'custom' && customStartDate) {
+      // 커스텀 기간인 경우 시작일부터 하루씩 더해나감
+      d = new Date(customStartDate.getTime() + (dayCount - 1 - i) * 24 * 60 * 60 * 1000);
+    } else {
+      // 프리셋인 경우 오늘부터 역산
+      d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    }
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const date = String(d.getDate()).padStart(2, '0');
     labels.push(`${month}-${date}`);
     
     const day = d.getDay();
     let weight = 1.0;
-    if (day === 5) weight = 1.45 + (Math.sin(i) * 0.05); // 주말 상승 가중
-    else if (day === 6) weight = 1.70 + (Math.sin(i) * 0.05);
-    else if (day === 0) weight = 1.55 + (Math.sin(i) * 0.05);
+    if (day === 5) weight = 1.45 + (Math.sin(i) * 0.05); // 금요일 가중
+    else if (day === 6) weight = 1.70 + (Math.sin(i) * 0.05); // 토요일 가중
+    else if (day === 0) weight = 1.55 + (Math.sin(i) * 0.05); // 일요일 가중
     else weight = 0.85 + (Math.sin(i) * 0.08); // 평일 가중
     
     spendData.push(Math.round(baseSpend * weight));
@@ -2878,18 +2926,23 @@ function renderCompetitiveAlertBanner() {
 
 let compModalCurrentItem = null;
 
-window.openCompDetailModal = async function(idx) {
-  const filter = elements.compStatusFilter.value;
-  const sort = elements.compSortSelect.value;
-  let data = getFilteredCompetitiveData();
-  if (filter !== 'all') data = data.filter(d => d.status === filter);
-  switch (sort) {
-    case 'gap-asc': data.sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity)); break;
-    case 'gap-desc': data.sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)); break;
-    case 'competitors-desc': data.sort((a, b) => b.competitorCount - a.competitorCount); break;
-    case 'name-asc': data.sort((a, b) => a.adName.localeCompare(b.adName)); break;
+window.openCompDetailModal = async function(adIdOrIdx) {
+  let item = null;
+  if (typeof adIdOrIdx === 'number' || !isNaN(adIdOrIdx)) {
+    const filter = elements.compStatusFilter.value;
+    const sort = elements.compSortSelect.value;
+    let data = getFilteredCompetitiveData();
+    if (filter !== 'all') data = data.filter(d => d.status === filter);
+    switch (sort) {
+      case 'gap-asc': data.sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity)); break;
+      case 'gap-desc': data.sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)); break;
+      case 'competitors-desc': data.sort((a, b) => b.competitorCount - a.competitorCount); break;
+      case 'name-asc': data.sort((a, b) => a.adName.localeCompare(b.adName)); break;
+    }
+    item = data[adIdOrIdx];
+  } else {
+    item = (state.competitiveData || []).find(d => d.adId === adIdOrIdx);
   }
-  const item = data[idx];
   if (!item) return;
   compModalCurrentItem = item;
 
@@ -3276,4 +3329,150 @@ function exportCompetitiveCSV() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// --- Overview Chart Filters & Advanced Cards ---
+
+window.filterOverviewChart = function(preset) {
+  state.overviewChartRange.type = preset;
+  state.overviewChartRange.start = null;
+  state.overviewChartRange.end = null;
+  
+  const buttons = ['7d', '14d', 'month'];
+  buttons.forEach(b => {
+    const btn = document.getElementById(`btn-chart-${b}`);
+    if (btn) {
+      if (b === preset) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+  
+  const startEl = document.getElementById('chart-start-date');
+  const endEl = document.getElementById('chart-end-date');
+  if (startEl && endEl) {
+    startEl.value = '';
+    endEl.value = '';
+  }
+  
+  updateOverviewKPIs();
+};
+
+window.applyCustomChartRange = function() {
+  const startVal = document.getElementById('chart-start-date').value;
+  const endVal = document.getElementById('chart-end-date').value;
+  
+  if (!startVal || !endVal) {
+    alert('시작일과 종료일을 모두 지정해 주세요.');
+    return;
+  }
+  if (new Date(startVal) > new Date(endVal)) {
+    alert('종료일은 시작일보다 빠를 수 없습니다.');
+    return;
+  }
+  
+  state.overviewChartRange.type = 'custom';
+  state.overviewChartRange.start = startVal;
+  state.overviewChartRange.end = endVal;
+  
+  const buttons = ['7d', '14d', 'month'];
+  buttons.forEach(b => {
+    const btn = document.getElementById(`btn-chart-${b}`);
+    if (btn) btn.classList.remove('active');
+  });
+  
+  updateOverviewKPIs();
+};
+
+window.renderDonutChart = function(isRealConnection) {
+  const ctx = document.getElementById('donut-chart');
+  if (!ctx) return;
+  
+  let searchBudget = 0;
+  let shoppingBudget = 0;
+  
+  state.campaigns.forEach(c => {
+    const budget = c.dailyBudget !== undefined ? c.dailyBudget : (c.userLimitAmt || 0);
+    if (c.campaignTp === 'SHOPPING') {
+      shoppingBudget += budget;
+    } else {
+      searchBudget += budget;
+    }
+  });
+  
+  if (searchBudget === 0 && shoppingBudget === 0) {
+    searchBudget = 800000;
+    shoppingBudget = 400000;
+  }
+  
+  if (state.charts.donut) {
+    state.charts.donut.destroy();
+  }
+  
+  state.charts.donut = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['파워링크 (검색광고)', '쇼핑검색 광고'],
+      datasets: [{
+        data: [searchBudget, shoppingBudget],
+        backgroundColor: ['#4f46e5', '#03C75A'],
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#9ca3af',
+            font: { family: 'Outfit', size: 11 },
+            padding: 12
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const value = context.raw;
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const percent = ((value / total) * 100).toFixed(1);
+              return `${context.label}: ₩${value.toLocaleString()} (${percent}%)`;
+            }
+          }
+        }
+      },
+      cutout: '65%'
+    }
+  });
+};
+
+window.renderOverviewHighPriceTop3 = function() {
+  const tbody = document.getElementById('overview-disadvantage-top3-body');
+  if (!tbody) return;
+  
+  const data = state.competitiveData || [];
+  const disadvantageItems = data
+    .filter(d => d.status === 'disadvantage' && d.gap !== null)
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, 3);
+    
+  if (disadvantageItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; opacity:0.5; padding:35px; color:var(--text-muted);">현재 가격 경쟁력이 열세인 상품이 없습니다. 🟢</td></tr>`;
+    return;
+  }
+  
+  tbody.innerHTML = disadvantageItems.map((item) => {
+    return `
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+        <td style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:10px 0;" title="${item.adName}">${item.adName}</td>
+        <td>₩${item.price.toLocaleString()}</td>
+        <td style="color:#ef4444;">₩${(item.minCompPrice || 0).toLocaleString()}</td>
+        <td style="color:#ef4444; font-weight:600;">+₩${item.gap.toLocaleString()}</td>
+        <td>
+          <button class="btn-detail-action" onclick="switchTab('competitive'); setTimeout(() => openCompDetailModal('${item.adId}'), 150);" style="font-size:10px; padding:3px 8px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">조치</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+};
 
