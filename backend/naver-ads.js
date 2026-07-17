@@ -232,12 +232,76 @@ class NaverAdsAPI {
   }
 
   /**
+   * Get Performance Stats for campaigns, groups, ads or keywords
+   */
+  async getStats(ids, fields, startDate, endDate) {
+    const query = {
+      ids: Array.isArray(ids) ? ids.join(',') : ids,
+      fields: JSON.stringify(fields),
+      timeRange: JSON.stringify({ startDate, endDate })
+    };
+    return this.request('GET', '/stats', query);
+  }
+
+  /**
    * Mock data fallback handler
    */
   getMockResponse(method, path, queryParams, data) {
     // Simulate latency
     console.log(`[SIMULATION] Mock response for ${method} ${path}`);
     
+    // Stats Mocking (Real integration fallback and Simulation)
+    if (path === '/stats') {
+      const ids = (queryParams.ids || '').split(',');
+      const fields = JSON.parse(queryParams.fields || '[]');
+      const timeRange = JSON.parse(queryParams.timeRange || '{}');
+      
+      const statsData = ids.map(id => {
+        const charSum = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const isCampaign = id.startsWith('cam-');
+        
+        let impCnt = 0;
+        let clkCnt = 0;
+        let salesAmt = 0;
+        
+        if (isCampaign) {
+          // Campaign level stats
+          impCnt = 5000 + (charSum % 3000);
+          clkCnt = 80 + (charSum % 50);
+          salesAmt = 45000 + (charSum % 15000); // 45,000 ~ 60,000 Spend
+        } else {
+          // Adgroup/Ad stats
+          impCnt = 800 + (charSum % 400);
+          clkCnt = 12 + (charSum % 10);
+          salesAmt = 8000 + (charSum % 4000);
+        }
+        
+        // Multiply by days elapsed if it's monthly (different range)
+        if (timeRange.startDate && timeRange.endDate && timeRange.startDate !== timeRange.endDate) {
+          const start = new Date(timeRange.startDate);
+          const end = new Date(timeRange.endDate);
+          const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1;
+          
+          impCnt = impCnt * diffDays;
+          clkCnt = clkCnt * diffDays;
+          salesAmt = salesAmt * diffDays;
+        }
+        
+        const values = fields.map(field => {
+          if (field === 'impCnt') return impCnt;
+          if (field === 'clkCnt') return clkCnt;
+          if (field === 'salesAmt') return salesAmt;
+          if (field === 'ctr') return parseFloat(((clkCnt / impCnt) * 100).toFixed(2));
+          if (field === 'cpc') return clkCnt > 0 ? Math.round(salesAmt / clkCnt) : 0;
+          return 0;
+        });
+        
+        return { id, values };
+      });
+      
+      return { timeRange, fields, data: statsData };
+    }
+
     // 1. Keyword Tool
     if (path === '/keywordstool') {
       const keywords = (queryParams.hintKeywords || '').split(',');

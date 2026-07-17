@@ -673,49 +673,90 @@ function updateConnectionStatusUI() {
 // TAB 1: OVERVIEW RENDERING
 // -------------------------------------------------------------
 
-function updateOverviewKPIs() {
+async function updateOverviewKPIs() {
   const isRealConnection = state.settings && state.settings.isConnected;
   
   let activeDailyBudgetSum = 0;
-  let totalChargeCostSum = 0;
-  
   state.campaigns.forEach(c => {
     const isActive = c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false;
     if (isActive) {
       activeDailyBudgetSum += (c.dailyBudget !== undefined ? c.dailyBudget : (c.userLimitAmt || 0));
-      totalChargeCostSum += (c.totalChargeCost || 0);
     }
   });
 
+  const activeCampaigns = state.campaigns.filter(c => {
+    return c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false;
+  });
+  const activeIds = activeCampaigns.map(c => c.nccCampaignId).join(',');
+
+  const now = new Date();
+  const todayStr = formatDate(now);
+  const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+  let todaySales = 0;
+  let todayClicks = 0;
+  let todayImpressions = 0;
+  let monthlySales = 0;
+
+  if (activeIds) {
+    try {
+      // 1. Fetch Today's Stats
+      const todayRes = await resilientFetch(`/api/naver-ads/stats?ids=${activeIds}&fields=${encodeURIComponent(JSON.stringify(['impCnt','clkCnt','salesAmt','ctr','cpc']))}&startDate=${todayStr}&endDate=${todayStr}`);
+      if (todayRes.ok) {
+        const todayData = await todayRes.json();
+        if (todayData && todayData.data) {
+          todayData.data.forEach(item => {
+            todayImpressions += (item.values[0] || 0);
+            todayClicks += (item.values[1] || 0);
+            todaySales += (item.values[2] || 0);
+          });
+        }
+      }
+      
+      // 2. Fetch Month-to-date Stats
+      const monthlyRes = await resilientFetch(`/api/naver-ads/stats?ids=${activeIds}&fields=${encodeURIComponent(JSON.stringify(['salesAmt']))}&startDate=${monthStartStr}&endDate=${todayStr}`);
+      if (monthlyRes.ok) {
+        const monthlyData = await monthlyRes.json();
+        if (monthlyData && monthlyData.data) {
+          monthlyData.data.forEach(item => {
+            monthlySales += (item.values[0] || 0);
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load real stats from Naver API:', e.message);
+    }
+  }
+
   // 1. 이번 달 총 마케팅 비용 (당월 누적 소진액)
-  let totalMonthlySpend = totalChargeCostSum;
+  let totalMonthlySpend = monthlySales;
   if (!isRealConnection || totalMonthlySpend === 0) {
     totalMonthlySpend = 1462800; // Realistic Default Mock
   }
 
   // 2. 일일 누적 소진 금액 (오늘 하루 소진액)
-  let dailySpent = 0;
-  if (isRealConnection && activeDailyBudgetSum > 0) {
-    dailySpent = Math.round(activeDailyBudgetSum * 0.62);
-  } else {
-    dailySpent = 48500; // Mock 오늘 소진액
+  let dailySpent = todaySales;
+  if (!isRealConnection || dailySpent === 0) {
+    dailySpent = isRealConnection && activeDailyBudgetSum > 0
+      ? Math.round(activeDailyBudgetSum * 0.62)
+      : 48500; // Mock 오늘 소진액
   }
 
   // 3. 일일 총 클릭 수
-  let dailyClicks = 0;
-  if (isRealConnection) {
-    dailyClicks = Math.round(dailySpent / 1150);
-  } else {
-    dailyClicks = 42; // Mock 오늘 클릭 수
+  let dailyClicks = todayClicks;
+  if (!isRealConnection || dailyClicks === 0) {
+    dailyClicks = isRealConnection
+      ? Math.round(dailySpent / 1150)
+      : 42; // Mock 오늘 클릭 수
   }
   if (dailyClicks === 0) dailyClicks = 10;
 
   // 오늘 평균 CTR 계산
-  let ctrVal = 1.84;
-  if (isRealConnection) {
-    ctrVal = parseFloat((1.65 + (state.campaigns.length % 5) * 0.15).toFixed(2));
-  } else {
-    ctrVal = 1.84;
+  let ctrVal = todayImpressions > 0 ? parseFloat(((todayClicks / todayImpressions) * 100).toFixed(2)) : 1.84;
+  if (!isRealConnection || ctrVal === 0) {
+    ctrVal = isRealConnection
+      ? parseFloat((1.65 + (state.campaigns.length % 5) * 0.15).toFixed(2))
+      : 1.84;
   }
 
   // 4. 이번주 구매 전환 수 (Conversions)
@@ -766,7 +807,7 @@ function updateOverviewKPIs() {
   }
 
   // Render Chart
-  updateOverviewChart(isRealConnection, activeDailyBudgetSum, dailySpent, dailyClicks);
+  await updateOverviewChart(isRealConnection, activeDailyBudgetSum, dailySpent, dailyClicks);
 
   // Render Advanced Dashboard Cards
   renderDonutChart(isRealConnection);
@@ -774,57 +815,43 @@ function updateOverviewKPIs() {
   renderOverviewHighPriceTop3();
 }
 
-function updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount) {
-  const labels = [];
-  const spendData = [];
-  const clicksData = [];
+async function updateOverviewChart(isRealConnection, activeDailyBudgetSum, spentAmt, clicksCount) {
+  const range = state.overviewChartRange || { type: '14d' };
   
   const now = new Date();
-  const baseSpend = spentAmt || 48500;
-  const baseClicks = clicksCount || 42;
-  
-  const range = state.overviewChartRange || { type: '14d' };
-  let dayCount = 14;
-  let customStartDate = null;
+  let startDateStr = '';
+  let endDateStr = formatDate(now);
   
   if (range.type === '7d') {
-    dayCount = 7;
+    const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+    startDateStr = formatDate(d);
   } else if (range.type === '14d') {
-    dayCount = 14;
+    const d = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000);
+    startDateStr = formatDate(d);
   } else if (range.type === 'month') {
-    // 이번 달 1일부터 오늘까지
-    dayCount = now.getDate();
+    startDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   } else if (range.type === 'custom' && range.start && range.end) {
-    const start = new Date(range.start);
-    const end = new Date(range.end);
-    const diffTime = Math.abs(end - start);
-    dayCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-    customStartDate = start;
+    startDateStr = range.start;
+    endDateStr = range.end;
+  } else {
+    // Default 14d
+    const d = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000);
+    startDateStr = formatDate(d);
   }
 
-  for (let i = dayCount - 1; i >= 0; i--) {
-    let d;
-    if (range.type === 'custom' && customStartDate) {
-      // 커스텀 기간인 경우 시작일부터 하루씩 더해나감
-      d = new Date(customStartDate.getTime() + (dayCount - 1 - i) * 24 * 60 * 60 * 1000);
-    } else {
-      // 프리셋인 경우 오늘부터 역산
-      d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+  let dailyData = [];
+  try {
+    const res = await resilientFetch(`/api/naver-ads/daily-stats?startDate=${startDateStr}&endDate=${endDateStr}`);
+    if (res.ok) {
+      dailyData = await res.json();
     }
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const date = String(d.getDate()).padStart(2, '0');
-    labels.push(`${month}-${date}`);
-    
-    const day = d.getDay();
-    let weight = 1.0;
-    if (day === 5) weight = 1.45 + (Math.sin(i) * 0.05); // 금요일 가중
-    else if (day === 6) weight = 1.70 + (Math.sin(i) * 0.05); // 토요일 가중
-    else if (day === 0) weight = 1.55 + (Math.sin(i) * 0.05); // 일요일 가중
-    else weight = 0.85 + (Math.sin(i) * 0.08); // 평일 가중
-    
-    spendData.push(Math.round(baseSpend * weight));
-    clicksData.push(Math.round(baseClicks * weight));
+  } catch (err) {
+    console.error('Failed to fetch daily stats timeseries:', err);
   }
+
+  const labels = dailyData.map(item => item.date);
+  const spendData = dailyData.map(item => item.spend);
+  const clicksData = dailyData.map(item => item.clicks);
 
   const ctx = document.getElementById('overview-chart').getContext('2d');
 
