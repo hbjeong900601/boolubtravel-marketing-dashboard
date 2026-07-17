@@ -450,10 +450,16 @@ export default {
               timeRange: JSON.stringify({ startDate, endDate })
             }, null, db.naverAdsSettings);
             
-            if (statsData && statsData.data) {
+            if (statsData && statsData.data && statsData.fields) {
+              const fields = statsData.fields;
+              const salesIdx = fields.indexOf('salesAmt');
+              const clkIdx = fields.indexOf('clkCnt');
+              
               statsData.data.forEach(item => {
-                totalSpend += (item.values[2] || 0);
-                totalClicks += (item.values[1] || 0);
+                if (item.values) {
+                  if (salesIdx !== -1) totalSpend += parseInt(item.values[salesIdx] || 0, 10);
+                  if (clkIdx !== -1) totalClicks += parseInt(item.values[clkIdx] || 0, 10);
+                }
               });
             }
           } catch (err) {

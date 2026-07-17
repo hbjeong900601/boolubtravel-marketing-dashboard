@@ -49,6 +49,14 @@ function getAuthHeaders(existingHeaders) {
   return headers;
 }
 
+// Global Date Formatting Helper (YYYY-MM-DD)
+window.formatDate = function(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${date}`;
+};
+
 // Resilient fetch: auto-fallback to Workers backend when primary API_BASE is unreachable
 async function resilientFetch(path, options = {}) {
   // Inject auth token into all requests
@@ -704,11 +712,18 @@ async function updateOverviewKPIs() {
       const todayRes = await resilientFetch(`/api/naver-ads/stats?ids=${activeIds}&fields=${encodeURIComponent(JSON.stringify(['impCnt','clkCnt','salesAmt','ctr','cpc']))}&startDate=${todayStr}&endDate=${todayStr}`);
       if (todayRes.ok) {
         const todayData = await todayRes.json();
-        if (todayData && todayData.data) {
+        if (todayData && todayData.data && todayData.fields) {
+          const fields = todayData.fields;
+          const impIdx = fields.indexOf('impCnt');
+          const clkIdx = fields.indexOf('clkCnt');
+          const salesIdx = fields.indexOf('salesAmt');
+
           todayData.data.forEach(item => {
-            todayImpressions += (item.values[0] || 0);
-            todayClicks += (item.values[1] || 0);
-            todaySales += (item.values[2] || 0);
+            if (item.values) {
+              if (impIdx !== -1) todayImpressions += parseInt(item.values[impIdx] || 0, 10);
+              if (clkIdx !== -1) todayClicks += parseInt(item.values[clkIdx] || 0, 10);
+              if (salesIdx !== -1) todaySales += parseInt(item.values[salesIdx] || 0, 10);
+            }
           });
         }
       }
@@ -717,9 +732,14 @@ async function updateOverviewKPIs() {
       const monthlyRes = await resilientFetch(`/api/naver-ads/stats?ids=${activeIds}&fields=${encodeURIComponent(JSON.stringify(['salesAmt']))}&startDate=${monthStartStr}&endDate=${todayStr}`);
       if (monthlyRes.ok) {
         const monthlyData = await monthlyRes.json();
-        if (monthlyData && monthlyData.data) {
+        if (monthlyData && monthlyData.data && monthlyData.fields) {
+          const fields = monthlyData.fields;
+          const salesIdx = fields.indexOf('salesAmt');
+
           monthlyData.data.forEach(item => {
-            monthlySales += (item.values[0] || 0);
+            if (item.values && salesIdx !== -1) {
+              monthlySales += parseInt(item.values[salesIdx] || 0, 10);
+            }
           });
         }
       }
