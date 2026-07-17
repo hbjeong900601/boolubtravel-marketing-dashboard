@@ -423,32 +423,49 @@ export default {
         const startDate = url.searchParams.get('startDate');
         const endDate = url.searchParams.get('endDate');
         
-        const campaigns = db.products.map((p, idx) => `cam-00${idx + 1}`).join(',');
-        
         const start = new Date(startDate);
         const end = new Date(endDate);
         const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1;
         
-        const dailyStats = [];
-        
-        const statsData = await proxyNaverAds('GET', '/stats', {
-          ids: campaigns,
-          fields: JSON.stringify(['impCnt', 'clkCnt', 'salesAmt']),
-          timeRange: JSON.stringify({ startDate, endDate })
-        }, null, db.naverAdsSettings);
-        
         let totalSpend = 0;
         let totalClicks = 0;
-        if (statsData && statsData.data) {
-          statsData.data.forEach(item => {
-            totalSpend += (item.values[2] || 0);
-            totalClicks += (item.values[1] || 0);
-          });
+
+        // 1. Fetch live campaigns to avoid querying stats with invalid IDs
+        let activeCampaignIds = '';
+        try {
+          const liveCampaigns = await proxyNaverAds('GET', '/ncc/campaigns', null, null, db.naverAdsSettings);
+          if (liveCampaigns && Array.isArray(liveCampaigns)) {
+            activeCampaignIds = liveCampaigns.map(c => c.nccCampaignId).join(',');
+          }
+        } catch (e) {
+          console.warn('Failed to query live campaigns for stats, falling back to mock:', e.message);
+        }
+
+        // 2. Query stats only if valid campaign IDs exist
+        if (activeCampaignIds) {
+          try {
+            const statsData = await proxyNaverAds('GET', '/stats', {
+              ids: activeCampaignIds,
+              fields: JSON.stringify(['impCnt', 'clkCnt', 'salesAmt']),
+              timeRange: JSON.stringify({ startDate, endDate })
+            }, null, db.naverAdsSettings);
+            
+            if (statsData && statsData.data) {
+              statsData.data.forEach(item => {
+                totalSpend += (item.values[2] || 0);
+                totalClicks += (item.values[1] || 0);
+              });
+            }
+          } catch (err) {
+            console.warn('Failed to query real stats from Naver API, using fallback calculations:', err.message);
+          }
         }
         
+        // 3. Fallback to default mock values if totalSpend/totalClicks is 0
         if (totalSpend === 0) totalSpend = 48500 * diffDays;
         if (totalClicks === 0) totalClicks = 42 * diffDays;
         
+        const dailyStats = [];
         for (let i = 0; i < diffDays; i++) {
           const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
           const month = String(d.getMonth() + 1).padStart(2, '0');

@@ -358,24 +358,40 @@ app.get('/api/naver-ads/stats', async (req, res) => {
 app.get('/api/naver-ads/daily-stats', async (req, res) => {
   const { startDate, endDate } = req.query;
   try {
-    const db = getDB();
-    const campaigns = db.products.map((p, idx) => `cam-00${idx + 1}`).join(',');
-    
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1;
-    
-    const statsData = await adApi.getStats(campaigns, ['impCnt', 'clkCnt', 'salesAmt'], startDate, endDate);
-    
+
     let totalSpend = 0;
     let totalClicks = 0;
-    if (statsData && statsData.data) {
-      statsData.data.forEach(item => {
-        totalSpend += (item.values[2] || 0);
-        totalClicks += (item.values[1] || 0);
-      });
+
+    // 1. Fetch live campaigns to avoid querying with invalid mock IDs
+    let activeCampaignIds = '';
+    try {
+      const liveCampaigns = await adApi.getCampaigns();
+      if (liveCampaigns && Array.isArray(liveCampaigns)) {
+        activeCampaignIds = liveCampaigns.map(c => c.nccCampaignId).join(',');
+      }
+    } catch (e) {
+      console.warn('Failed to query campaigns for stats, falling back to simulation:', e.message);
     }
-    
+
+    // 2. Query Naver stats API only if valid campaign IDs exist
+    if (activeCampaignIds) {
+      try {
+        const statsData = await adApi.getStats(activeCampaignIds, ['impCnt', 'clkCnt', 'salesAmt'], startDate, endDate);
+        if (statsData && statsData.data) {
+          statsData.data.forEach(item => {
+            totalSpend += (item.values[2] || 0);
+            totalClicks += (item.values[1] || 0);
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to fetch real stats metrics, using fallback values:', err.message);
+      }
+    }
+
+    // 3. Fallback to default mock values if totalSpend/totalClicks is 0
     if (totalSpend === 0) totalSpend = 48500 * diffDays;
     if (totalClicks === 0) totalClicks = 42 * diffDays;
     
