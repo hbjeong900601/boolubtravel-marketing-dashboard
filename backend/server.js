@@ -305,9 +305,7 @@ app.get('/api/naver-ads/campaigns', async (req, res) => {
     const campaigns = await adApi.getCampaigns();
     res.json(campaigns);
   } catch (err) {
-    console.warn('Real Naver Ads campaigns call failed, serving simulation fallback:', err.message);
-    const mockCampaigns = adApi.getMockResponse('GET', '/ncc/campaigns');
-    res.json(mockCampaigns);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -318,9 +316,7 @@ app.get('/api/naver-ads/adgroups', async (req, res) => {
     const groups = await adApi.getAdGroups(campaignId);
     res.json(groups);
   } catch (err) {
-    console.warn('Real Naver Ads getAdGroups failed, serving simulation fallback:', err.message);
-    const mockGroups = adApi.getMockResponse('GET', '/ncc/adgroups', { nccCampaignId: campaignId });
-    res.json(mockGroups);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -331,9 +327,7 @@ app.get('/api/naver-ads/keywords', async (req, res) => {
     const keywords = await adApi.getKeywords(adgroupId);
     res.json(keywords);
   } catch (err) {
-    console.warn('Real Naver Ads getKeywords failed, serving simulation fallback:', err.message);
-    const mockKeywords = adApi.getMockResponse('GET', '/ncc/keywords', { nccAdgroupId: adgroupId });
-    res.json(mockKeywords);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -344,9 +338,7 @@ app.get('/api/naver-ads/ads', async (req, res) => {
     const ads = await adApi.getAds(adgroupId);
     res.json(ads);
   } catch (err) {
-    console.warn('Real Naver Ads getAds failed, serving simulation fallback:', err.message);
-    const mockAds = adApi.getMockResponse('GET', '/ncc/ads', { nccAdgroupId: adgroupId });
-    res.json(mockAds);
+    res.status(500).json({ error: err.message });
   }
 });
 
