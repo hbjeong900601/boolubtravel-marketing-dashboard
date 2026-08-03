@@ -2728,7 +2728,7 @@ async function runCompetitiveScan(isAuto = false) {
       const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
       const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
       const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
-      state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: 0 });
+      state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length, data.source), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: 0 });
     } catch (err) { console.warn(`Scan failed for ${ad.adName}:`, err.message); }
     if (i < total - 1) await new Promise(r => setTimeout(r, 300));
   }
@@ -2746,8 +2746,16 @@ async function runCompetitiveScan(isAuto = false) {
   renderStrategySummary();
 }
 
-function getCompetitiveStatus(ourPrice, minCompPrice, count) {
-  if (count === 0 || minCompPrice === null || !minCompPrice) return 'monopoly';
+function getCompetitiveStatus(ourPrice, minCompPrice, count, source) {
+  // Sources that indicate REAL successful scraping
+  const realDataSources = ['puppeteer_real', 'cloudflare_worker_crawler', 'naver_open_api'];
+  const isRealData = source && realDataSources.includes(source);
+  
+  if (count === 0 || minCompPrice === null || !minCompPrice) {
+    // Only mark as "monopoly" if we actually got real data and found 0 competitors
+    // Otherwise mark as "unknown" (data unavailable)
+    return isRealData ? 'monopoly' : 'unknown';
+  }
   
   const diff = ourPrice - minCompPrice;
   
@@ -2767,7 +2775,7 @@ function getCompetitiveStatus(ourPrice, minCompPrice, count) {
 }
 
 function getCompetitiveStrategy(status) {
-  const map = { lowest: { emoji: '🟢', label: '공격적 입찰', desc: 'CPC를 올려 상위 노출을 확대하세요' }, close: { emoji: '🟡', label: '현 입찰 유지', desc: '리뷰·배송 등 부가가치 차별화' }, disadvantage: { emoji: '🔴', label: '입찰 하향 검토', desc: '가격 조정이나 프로모션 검토' }, monopoly: { emoji: '⭐', label: '최소 입찰 운영', desc: '독점 키워드, 효율적 운영 가능' } };
+  const map = { lowest: { emoji: '🟢', label: '공격적 입찰', desc: 'CPC를 올려 상위 노출을 확대하세요' }, close: { emoji: '🟡', label: '현 입찰 유지', desc: '리뷰·배송 등 부가가치 차별화' }, disadvantage: { emoji: '🔴', label: '입찰 하향 검토', desc: '가격 조정이나 프로모션 검토' }, monopoly: { emoji: '⭐', label: '최소 입찰 운영', desc: '독점 키워드, 효율적 운영 가능' }, unknown: { emoji: '⚪', label: '데이터 수집불가', desc: '네이버 쇼핑 검색 결과를 가져올 수 없습니다' } };
   return map[status] || { emoji: '❓', label: '-', desc: '' };
 }
 
@@ -2942,6 +2950,8 @@ function getRecommendedCpc(item) {
     return { value: currentCpc || 150, label: '→ 유지', color: '#ffc107', tip: '경쟁 근접 → 현재 CPC 유지 권장' };
   } else if (item.status === 'disadvantage') {
     return { value: Math.max(Math.round(currentCpc * 0.7 / 10) * 10, 50), label: '↓ 절감', color: '#ff5252', tip: '가격 열위 → CPC 낮춰 비용 절감' };
+  } else if (item.status === 'unknown') {
+    return { value: currentCpc || 100, label: '- 대기', color: '#9e9e9e', tip: '데이터 수집불가 → 재스캔 후 판단' };
   } else {
     return { value: 50, label: '↓ 최소', color: '#a78bfa', tip: '독점 → 최소 입찰가로 효율 운영' };
   }
@@ -2972,7 +2982,7 @@ function renderCompetitiveTable() {
   if (data.length === 0) { elements.compTableTbody.innerHTML = `<tr><td colspan="12" style="text-align:center; opacity:0.5; padding:40px;">필터 조건에 맞는 상품이 없습니다.</td></tr>`; return; }
 
   elements.compTableTbody.innerHTML = data.map((item, idx) => {
-    const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
+    const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점', unknown: '⚪ 수집불가' };
     let gapHtml = item.gap === null ? '<span class="gap-zero">-</span>' : item.gap > 0 ? `<span class="gap-positive">+₩${item.gap.toLocaleString()}</span>` : item.gap < 0 ? `<span class="gap-negative">-₩${Math.abs(item.gap).toLocaleString()}</span>` : '<span class="gap-zero">₩0</span>';
     
     const currentCpc = item.currentCpc || 0;
@@ -3049,7 +3059,7 @@ window.openCompDetailModal = async function(adIdOrIdx) {
   compModalCurrentItem = item;
 
   const modal = document.getElementById('comp-detail-modal');
-  const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
+  const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점', unknown: '⚪ 수집불가' };
   const rec = getRecommendedCpc(item);
 
   document.getElementById('comp-modal-title').innerText = item.adName;
@@ -3437,12 +3447,12 @@ function drawCompetitiveChart() {
     if (elements.compChartLegend) elements.compChartLegend.innerHTML = '<div style="opacity:0.5; font-size:12px;">데이터가 없습니다.</div>';
     return;
   }
-  const counts = { lowest: data.filter(d => d.status === 'lowest').length, close: data.filter(d => d.status === 'close').length, disadvantage: data.filter(d => d.status === 'disadvantage').length, monopoly: data.filter(d => d.status === 'monopoly').length };
+  const counts = { lowest: data.filter(d => d.status === 'lowest').length, close: data.filter(d => d.status === 'close').length, disadvantage: data.filter(d => d.status === 'disadvantage').length, monopoly: data.filter(d => d.status === 'monopoly').length, unknown: data.filter(d => d.status === 'unknown').length };
   const ctx = canvas.getContext('2d');
   if (state.charts.competitive) state.charts.competitive.destroy();
-  const colors = ['#00e676', '#ffc107', '#ff5252', '#a78bfa'];
-  const labels = ['최저가', '근접', '열위', '독점'];
-  const values = [counts.lowest, counts.close, counts.disadvantage, counts.monopoly];
+  const colors = ['#00e676', '#ffc107', '#ff5252', '#a78bfa', '#9e9e9e'];
+  const labels = ['최저가', '근접', '열위', '독점', '수집불가'];
+  const values = [counts.lowest, counts.close, counts.disadvantage, counts.monopoly, counts.unknown];
   state.charts.competitive = new Chart(ctx, { type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const t = ctx.dataset.data.reduce((a,b) => a+b, 0); return `${ctx.label}: ${ctx.raw}개 (${t > 0 ? ((ctx.raw/t)*100).toFixed(1) : 0}%)`; } } } } } });
   if (elements.compChartLegend) elements.compChartLegend.innerHTML = labels.map((l, i) => `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`).join('');
 }
@@ -3455,12 +3465,13 @@ function renderStrategySummary() {
     container.innerHTML = '<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>';
     return;
   }
-  const lc = data.filter(d => d.status === 'lowest').length, cc = data.filter(d => d.status === 'close').length, dc = data.filter(d => d.status === 'disadvantage').length, mc = data.filter(d => d.status === 'monopoly').length;
+  const lc = data.filter(d => d.status === 'lowest').length, cc = data.filter(d => d.status === 'close').length, dc = data.filter(d => d.status === 'disadvantage').length, mc = data.filter(d => d.status === 'monopoly').length, uc = data.filter(d => d.status === 'unknown').length;
   const items = [];
   if (lc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lc}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있으므로 전환율이 높습니다.</div></div>`);
   if (cc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟡</span><div><strong>근접 ${cc}개 상품</strong> — 현 입찰가를 유지하되, 리뷰 수·배송 속도·부가 서비스 등 비가격 차별화 포인트를 강조하세요.</div></div>`);
   if (dc > 0) { const top = data.filter(d => d.status === 'disadvantage').sort((a,b) => b.gap - a.gap).slice(0,3); items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${dc}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나, 가격 인하 프로모션을 검토하세요. 주요: ${top.map(d => `"${d.adName.substring(0,20)}…" (+₩${d.gap.toLocaleString()})`).join(', ')}</div></div>`); }
   if (mc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${mc}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가로 효율적 운영이 가능합니다.</div></div>`);
+  if (uc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⚪</span><div><strong>수집불가 ${uc}개 상품</strong> — 네이버 쇼핑 검색 결과를 가져올 수 없습니다. IP 차단 해제 후 재스캔하세요.</div></div>`);
   if (items.length === 0) items.push(`<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>`);
   container.innerHTML = items.join('');
 }
@@ -3470,7 +3481,7 @@ function exportCompetitiveCSV() {
   if (data.length === 0) return;
   const BOM = '\uFEFF';
   const headers = ['상품명','자사 판매가','경쟁사 최저가','가격 차이','경쟁력 상태','최저가 업체','경쟁사 수','전략','캠페인','광고그룹'];
-  const statusLabels = { lowest: '최저가', close: '근접', disadvantage: '열위', monopoly: '독점' };
+  const statusLabels = { lowest: '최저가', close: '근접', disadvantage: '열위', monopoly: '독점', unknown: '수집불가' };
   const rows = data.map(item => {
     const s = getCompetitiveStrategy(item.status);
     return [`"${item.adName.replace(/"/g,'""')}"`, item.price, item.minCompPrice ?? '-', item.gap ?? '-', statusLabels[item.status] || '-', `"${item.minCompName.replace(/"/g,'""')}"`, item.competitorCount, `"${s.label}"`, `"${item.campaignName.replace(/"/g,'""')}"`, `"${item.adgroupName.replace(/"/g,'""')}"`].join(',');
