@@ -285,25 +285,36 @@ function getMockCompetitors(keyword, price, catalogId) {
 
   const isRoaming = keyword.includes('이심') || keyword.includes('esim') || keyword.includes('유심') || keyword.includes('로밍') || keyword.includes('데이터');
 
+  // Check if keyword implies an exclusive/monopoly offer
+  const isMonopoly = keyword.includes('단독') || keyword.includes('독점') || keyword.includes('B00') || (Math.random() < 0.15);
+  if (isMonopoly) {
+    return {
+      keyword,
+      success: true,
+      source: 'monopoly_detection',
+      competitors: []
+    };
+  }
+
   let competitorsList = [];
   if (isRoaming) {
     competitorsList = [
-      { name: '말톡', priceOffset: 0.98 },
-      { name: '도시락와이파이', priceOffset: 1.03 },
-      { name: '유심패스', priceOffset: 0.95 },
-      { name: '와이파이도시락', priceOffset: 1.05 },
-      { name: '유심스토어', priceOffset: 0.99 }
+      { name: '말톡', priceOffset: 0.91 },        // 타사가 확실히 쌈 -> 자사 열위
+      { name: '도시락와이파이', priceOffset: 1.12 }, // 타사가 비쌈 -> 자사 최저가
+      { name: '유심패스', priceOffset: 1.002 },     // 박빙 -> 근접
+      { name: '와이파이도시락', priceOffset: 1.08 }, // 타사가 비쌈 -> 자사 최저가
+      { name: '유심스토어', priceOffset: 0.88 }      // 타사가 훨씬 쌈 -> 자사 열위
     ];
   } else {
-    // Travel target competitors requested by user: 야놀자, 마이리얼트립, 와그, 클룩, kkday, 하나투어, 모두투어
+    // Travel target competitors with diverse price spectrum
     competitorsList = [
-      { name: '야놀자', priceOffset: 0.97 },
-      { name: '마이리얼트립', priceOffset: 0.99 },
-      { name: '와그 (WAUG)', priceOffset: 0.96 },
-      { name: '클룩 (Klook)', priceOffset: 1.02 },
-      { name: 'KKday', priceOffset: 1.01 },
-      { name: '하나투어', priceOffset: 1.05 },
-      { name: '모두투어', priceOffset: 1.04 }
+      { name: '야놀자', priceOffset: 0.92 },        // 타사가 8% 쌈 -> 자사 열위
+      { name: '마이리얼트립', priceOffset: 1.08 },  // 타사가 8% 비쌈 -> 자사 최저가
+      { name: '와그 (WAUG)', priceOffset: 1.001 },    // 박빙 -> 근접
+      { name: '클룩 (Klook)', priceOffset: 1.15 },   // 타사가 15% 비쌈 -> 자사 최저가
+      { name: 'KKday', priceOffset: 0.89 },         // 타사가 11% 쌈 -> 자사 열위
+      { name: '하나투어', priceOffset: 1.06 },       // 타사가 6% 비쌈 -> 자사 최저가
+      { name: '모두투어', priceOffset: 0.94 }        // 타사가 6% 쌈 -> 자사 열위
     ];
   }
 

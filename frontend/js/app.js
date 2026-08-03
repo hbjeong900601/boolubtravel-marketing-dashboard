@@ -1176,10 +1176,13 @@ function getMinPriceDiff(product) {
 
 function isCompetitive(product) {
   if (!product.competitors || product.competitors.length === 0) return 'NONE';
-  const diff = getMinPriceDiff(product);
-  if (diff < -5000) return 'BEST'; // Boolub cheaper by > 5,000 won
-  if (diff > 5000) return 'HIGH';  // Boolub more expensive by > 5,000 won
-  return 'NEUTRAL';
+  const minCompPrice = getMinCompetitorPrice(product);
+  if (!minCompPrice) return 'NONE';
+  
+  const diff = product.price - minCompPrice;
+  if (diff <= 0) return 'BEST'; // 최저가 우위
+  if (diff >= Math.max(500, minCompPrice * 0.015)) return 'HIGH'; // 타사 대비 고가 (열위)
+  return 'NEUTRAL'; // 근접 (1.5% 미만 미세 차이)
 }
 
 // Global action to execute crawler match
@@ -2743,10 +2746,22 @@ async function runCompetitiveScan(isAuto = false) {
 }
 
 function getCompetitiveStatus(ourPrice, minCompPrice, count) {
-  if (count === 0 || minCompPrice === null) return 'monopoly';
-  const r = ourPrice / minCompPrice;
-  if (r <= 1.0) return 'lowest';
-  if (r <= 1.05) return 'close';
+  if (count === 0 || minCompPrice === null || !minCompPrice) return 'monopoly';
+  
+  const diff = ourPrice - minCompPrice;
+  
+  // 1. 자사 가격이 경쟁사 최저가 이하일 때 -> 최저가 (lowest)
+  if (diff <= 0) {
+    return 'lowest';
+  }
+  
+  // 2. 미세한 차이 (500원 미만 또는 타사 최저가의 1.5% 미만 차이) -> 근접 (close)
+  const threshold = Math.max(500, minCompPrice * 0.015);
+  if (diff < threshold) {
+    return 'close';
+  }
+  
+  // 3. 타사 최저가보다 확실히 비싼 경우 -> 열위 (disadvantage)
   return 'disadvantage';
 }
 
