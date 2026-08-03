@@ -2593,18 +2593,15 @@ function loadCachedCompetitiveData() {
     const cached = localStorage.getItem(COMP_CACHE_KEY);
     const cachedTime = localStorage.getItem(COMP_SCAN_TIME_KEY);
     if (cached && cachedTime) {
-      state.competitiveData = JSON.parse(cached);
+      const parsedData = JSON.parse(cached);
+      // Recalculate status for cached items with updated formula
+      state.competitiveData = parsedData.map(item => ({
+        ...item,
+        status: getCompetitiveStatus(item.price, item.minCompPrice, item.competitorCount || 0)
+      }));
       elements.compLastScanTime.innerText = formatScanTime(new Date(parseInt(cachedTime, 10)));
-      renderCompetitiveTable();
-      renderCompetitiveKPIs();
-      drawCompetitiveChart();
-      renderStrategySummary();
+      filterCompetitiveView();
       elements.compExportCsvBtn.disabled = false;
-      const disadvantaged = state.competitiveData.filter(d => d.status === 'disadvantage');
-      if (disadvantaged.length > 0) {
-        elements.compAlertBanner.style.display = 'flex';
-        elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다.`;
-      }
     }
   } catch (e) { console.warn('Cache load failed:', e); }
 }
@@ -2719,11 +2716,21 @@ async function runCompetitiveScan(isAuto = false) {
 }
 
 function getCompetitiveStatus(ourPrice, minCompPrice, count) {
-  if (count === 0 || minCompPrice === null) return 'monopoly';
-  const r = ourPrice / minCompPrice;
-  if (r <= 1.0) return 'lowest';
-  if (r <= 1.05) return 'close';
-  return 'disadvantage';
+  if (count === 0 || minCompPrice === null || minCompPrice <= 0) return 'monopoly';
+  
+  const diff = ourPrice - minCompPrice;
+  const ratio = ourPrice / minCompPrice;
+
+  if (diff < 0) {
+    // 자사 가격이 경쟁사 최저가보다 명확히 저렴함
+    return 'lowest';
+  } else if (diff === 0 || (ratio >= 1.0 && ratio <= 1.03)) {
+    // 자사 가격이 경쟁사와 동일하거나 3% 이내 미세 차이
+    return 'close';
+  } else {
+    // 자사 가격이 경쟁사 최저가보다 3% 이상 비쌈
+    return 'disadvantage';
+  }
 }
 
 function getCompetitiveStrategy(status) {
