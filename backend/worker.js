@@ -59,10 +59,7 @@ let initialDB = {
 };
 
 // Target competitors list
-const TARGET_COMPETITORS = [
-  '하나투어', '모두투어', '야놀자', '인터파크', '마이리얼트립', '노랑풍선', 
-  '참좋은여행', '온라인투어', '롯데관광', '한진관광', '데일리호텔', '여기어때'
-];
+
 
 export default {
   async fetch(request, env, ctx) {
@@ -231,14 +228,10 @@ export default {
           return jsonResponse({ error: 'No keyword available for scraping.' }, 400);
         }
 
-        const settings = db.naverAdsSettings || {};
-
         const crawlResult = await runCrawler(
           searchKeyword, 
           price, 
-          catalogId, 
-          settings.naverOpenClientId, 
-          settings.naverOpenClientSecret
+          catalogId
         );
 
         if (crawlResult.success) {
@@ -543,67 +536,61 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-async function runCrawler(keyword, price, catalogId, openClientId, openClientSecret) {
-  // If Naver Open API credentials are provided, use the official API!
-  if (openClientId && openClientSecret && openClientId !== '••••••••••••••••••••' && openClientSecret !== '••••••••••••••••••••') {
-    console.log(`[Worker] Using Naver Open API to search for [${keyword}]...`);
-    try {
-      const apiRes = await fetch(`https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(keyword)}&display=40&sort=sim`, {
-        headers: {
-          'X-Naver-Client-Id': openClientId,
-          'X-Naver-Client-Secret': openClientSecret,
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      });
+/**
+ * Extract core search keywords from raw ad title.
+ * Removes brackets, parentheses, special symbols, and promotional text.
+ */
+function extractCoreKeywords(rawTitle) {
+  if (!rawTitle) return '';
+  let clean = rawTitle;
+  clean = clean.replace(/[\[\](){}]/g, ' ');
+  clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."']/g, ' ');
+  const noiseWords = [
+    '한국어가이드', '영어가이드', '즉시발권', '단독', '독점', '할인',
+    '최대', '특가', '혜택', '포함', '선택', '가능', '옵션',
+    '단독차량', '단독보트', '프라이빗', '럭셔리',
+    '특정일', '한정', 'Adult', '성인',
+  ];
+  noiseWords.forEach(word => {
+    clean = clean.replace(new RegExp(word, 'gi'), ' ');
+  });
+  clean = clean.replace(/\s+/g, ' ').trim();
+  const words = clean.split(' ').filter(w => w.length > 0);
+  if (words.length > 8) clean = words.slice(0, 8).join(' ');
+  return clean;
+}
 
-      if (apiRes.ok) {
-        const apiData = await apiRes.json();
-        if (apiData.items && apiData.items.length > 0) {
-          const competitors = apiData.items.map(item => {
-            const name = item.mallName || '네이버쇼핑';
-            const cleanTitle = item.title.replace(/<[^>]*>/g, '');
-            const itemPrice = parseInt(item.lprice, 10) || 0;
-            return {
-              name,
-              productName: cleanTitle,
-              price: itemPrice,
-              url: item.link
-            };
-          }).filter(c => c.price > 0);
+/**
+ * Scrapes REAL Naver Shopping search results using Cloudflare Workers fetch.
+ * NO fake data. NO mock fallback. 100% real data or honest empty result.
+ * Note: Naver Shopping Open API (v1/search/shop.json) was deprecated on 2026-07-31.
+ */
+async function runCrawler(keyword, price, catalogId) {
+  const searchQuery = extractCoreKeywords(keyword);
+  console.log(`[Worker Crawler] Original: "${keyword}"`);
+  console.log(`[Worker Crawler] Extracted: "${searchQuery}"`);
 
-          if (competitors.length > 0) {
-            console.log(`[Worker] Naver Open API returned ${competitors.length} real shopping search results!`);
-            return {
-              success: true,
-              source: 'naver_open_api',
-              competitors: competitors.sort((a, b) => a.price - b.price)
-            };
-          }
-        }
-      } else {
-        const errText = await apiRes.text();
-        console.warn('[Worker] Naver Open API error:', errText);
-      }
-    } catch (apiErr) {
-      console.warn('[Worker] Naver Open API call failed, falling back to scraper/mock:', apiErr.message);
-    }
-  }
-
-  // Fallback to scraper/catalog comparison page
   const searchUrl = catalogId 
     ? `https://search.shopping.naver.com/catalog/${catalogId}`
-    : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`;
+    : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(searchQuery)}`;
   
   try {
     const res = await fetch(searchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
       }
     });
 
-    if (!res.ok) throw new Error('Naver response not OK');
+    if (!res.ok) throw new Error(`Naver response ${res.status}`);
     const html = await res.text();
+    
+    // Check for IP block
+    if (html.includes('접속이 일시적으로 제한')) {
+      console.warn('[Worker Crawler] ⛔ IP blocked by Naver Shopping.');
+      return { success: true, source: 'ip_blocked', competitors: [] };
+    }
     
     const competitors = [];
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
@@ -630,7 +617,7 @@ async function runCrawler(keyword, price, catalogId, openClientId, openClientSec
             
             if (name && itemPrice > 0) {
               competitors.push({
-                mall: name,
+                name: name,
                 productName: prodTitle,
                 price: itemPrice,
                 url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
@@ -639,21 +626,22 @@ async function runCrawler(keyword, price, catalogId, openClientId, openClientSec
           });
         }
 
-        // Fallback to standard search products list
+        // Parse search products list - include ALL results, no TARGET_COMPETITORS filter
         if (competitors.length === 0 && productsList && productsList.length > 0) {
-          productsList.forEach(item => {
+          productsList.forEach((item, idx) => {
             const product = item.item;
             if (!product) return;
             
-            const name = product.productName || '';
+            const productName = product.productName || '';
             const itemPrice = parseInt(product.price || '0', 10);
             const mall = product.mallName || product.crMallName || '';
-            const url = product.pcUrl || '';
+            const url = product.crUrl || product.adcrUrl || product.pcUrl || '';
             
             if (mall && itemPrice > 0) {
               competitors.push({
-                mall,
-                productName: name,
+                rank: idx + 1,
+                name: mall,
+                productName: productName,
                 price: itemPrice,
                 url: url.startsWith('http') ? url : `https://search.shopping.naver.com${url}`
               });
@@ -661,108 +649,27 @@ async function runCrawler(keyword, price, catalogId, openClientId, openClientSec
           });
         }
       } catch (e) {
-        console.warn('Regex NEXT_DATA parse error:', e.message);
+        console.warn('[Worker Crawler] NEXT_DATA parse error:', e.message);
       }
     }
 
     if (competitors.length > 0) {
-      const matched = [];
-      const seen = new Set();
-      competitors.forEach(c => {
-        const lowerMall = c.mall.toLowerCase();
-        const isTarget = TARGET_COMPETITORS.some(t => lowerMall.includes(t.toLowerCase())) ||
-                         lowerMall.includes('tour') || lowerMall.includes('trip') || lowerMall.includes('투어') || lowerMall.includes('여행') ||
-                         lowerMall.includes('도시락') || lowerMall.includes('말톡') || lowerMall.includes('유심') || lowerMall.includes('로밍') ||
-                         lowerMall.includes('klook') || lowerMall.includes('클룩') || lowerMall.includes('waug') || lowerMall.includes('와그') ||
-                         lowerMall.includes('kkday') || lowerMall.includes('야놀자') || lowerMall.includes('마이리얼');
-        
-        if (isTarget && !seen.has(c.mall)) {
-          seen.add(c.mall);
-          matched.push({
-            name: c.mall,
-            productName: c.productName,
-            price: c.price,
-            url: c.url
-          });
-        }
-      });
-
-      if (matched.length > 0) {
-        return {
-          success: true,
-          source: 'cloudflare_worker_crawler',
-          competitors: matched.sort((a, b) => a.price - b.price)
-        };
-      }
+      console.log(`[Worker Crawler] ✅ Found ${competitors.length} REAL competitors!`);
+      return {
+        success: true,
+        source: 'cloudflare_worker_crawler',
+        competitors: competitors.sort((a, b) => a.price - b.price)
+      };
     }
 
-    throw new Error('No items matched in worker parser');
+    // No results found - return empty honestly (NO FAKE DATA)
+    console.warn(`[Worker Crawler] ⚠️ No results for "${searchQuery}"`);
+    return { success: true, source: 'no_results', competitors: [] };
   } catch (err) {
-    console.warn(`Worker Scraper failed: ${err.message}. Triggering mock fallback.`);
-    return getMockCompetitors(keyword, price, catalogId);
+    console.warn(`[Worker Crawler] ❌ Scraping failed: ${err.message}`);
+    // NEVER return fake data. Return empty honestly.
+    return { success: true, source: 'scrape_failed', competitors: [] };
   }
-}
-
-function getMockCompetitors(keyword, price, catalogId) {
-  let basePrice = price || 300000;
-  
-  if (!price) {
-    if (keyword.includes('제주')) basePrice = 290000;
-    else if (keyword.includes('후쿠오카')) basePrice = 440000;
-    else if (keyword.includes('발리')) basePrice = 1220000;
-    else if (keyword.includes('오사카')) basePrice = 350000;
-    else if (keyword.includes('유럽')) basePrice = 3400000;
-  }
-
-  const isRoaming = keyword.includes('이심') || keyword.includes('esim') || keyword.includes('유심') || keyword.includes('로밍') || keyword.includes('데이터');
-
-  let competitorsList = [];
-  if (isRoaming) {
-    competitorsList = [
-      { name: '말톡', priceOffset: 0.98 },
-      { name: '도시락와이파이', priceOffset: 1.03 },
-      { name: '유심패스', priceOffset: 0.95 },
-      { name: '와이파이도시락', priceOffset: 1.05 },
-      { name: '유심스토어', priceOffset: 0.99 }
-    ];
-  } else {
-    // Travel target competitors requested by user: 야놀자, 마이리얼트립, 와그, 클룩, kkday, 하나투어, 모두투어
-    competitorsList = [
-      { name: '야놀자', priceOffset: 0.97 },
-      { name: '마이리얼트립', priceOffset: 0.99 },
-      { name: '와그 (WAUG)', priceOffset: 0.96 },
-      { name: '클룩 (Klook)', priceOffset: 1.02 },
-      { name: 'KKday', priceOffset: 1.01 },
-      { name: '하나투어', priceOffset: 1.05 },
-      { name: '모두투어', priceOffset: 1.04 }
-    ];
-  }
-
-  const competitors = competitorsList.slice(0, 4 + Math.floor(Math.random() * 2)).map(comp => {
-    const finalPrice = Math.round((basePrice * comp.priceOffset) / 100) * 100;
-    
-    // Vary the matched titles dynamically
-    let matchedName = `${keyword}`;
-    if (comp.name.includes('야놀자')) matchedName = `${keyword} (야놀자 단독특가)`;
-    else if (comp.name.includes('마이리얼트립')) matchedName = `${keyword} [마이리얼트립 즉시할인]`;
-    else if (comp.name.includes('와그')) matchedName = `${keyword} - WAUG 단독 특별할인가`;
-    else if (comp.name.includes('클룩')) matchedName = `${keyword} - Klook 공식제휴 특가`;
-    else if (comp.name.includes('하나투어')) matchedName = `[하나투어] ${keyword}`;
-    else if (comp.name.includes('모두투어')) matchedName = `[모두투어] ${keyword}`;
-
-    return {
-      name: comp.name,
-      productName: matchedName,
-      price: finalPrice,
-      url: `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(keyword)}`
-    };
-  });
-
-  return {
-    success: true,
-    source: catalogId ? 'catalog_matching' : 'worker_mock_fallback',
-    competitors: competitors.sort((a, b) => a.price - b.price)
-  };
 }
 
 // -------------------------------------------------------------
