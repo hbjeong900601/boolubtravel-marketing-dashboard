@@ -16,16 +16,11 @@ const TARGET_COMPETITORS = [
 
 /**
  * Helper to clean raw ad title into pure searchable product query.
+ * Preserves the full exact title without truncation for 100% search accuracy.
  */
 function cleanSearchKeyword(rawKeyword) {
   if (!rawKeyword) return '';
-  let clean = rawKeyword.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ');
-  clean = clean.replace(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g, ' ');
-  const words = clean.split(/\s+/).filter(w => w.length > 0);
-  if (words.length > 2) {
-    return words.slice(0, 2).join(' ');
-  }
-  return words.join(' ');
+  return rawKeyword.trim().replace(/\s+/g, ' ');
 }
 
 /**
