@@ -3085,7 +3085,49 @@ window.openCompDetailModal = async function(adIdOrIdx) {
     const crawlData = await res.json();
     const competitors = (crawlData.product?.competitors || []).filter(c => c.price > 0);
     
-    document.getElementById('comp-modal-comp-count').innerText = competitors.length;
+    // Filter out own store from competitor min price calculation
+    const externalCompetitors = competitors.filter(c => {
+      const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
+      return !isOwn;
+    });
+
+    document.getElementById('comp-modal-comp-count').innerText = externalCompetitors.length;
+
+    // Dynamically update top cards & status badge with real-time minimum price!
+    if (externalCompetitors.length > 0) {
+      const realMinCompPrice = Math.min(...externalCompetitors.map(c => c.price));
+      const realMinCompObj = externalCompetitors.find(c => c.price === realMinCompPrice);
+      const realGap = item.price - realMinCompPrice;
+      const realStatus = getCompetitiveStatus(item.price, realMinCompPrice, externalCompetitors.length);
+
+      // Update item in state
+      item.minCompPrice = realMinCompPrice;
+      item.minCompName = realMinCompObj ? realMinCompObj.name : '-';
+      item.gap = realGap;
+      item.status = realStatus;
+      item.competitorCount = externalCompetitors.length;
+
+      // Update top card UI in modal instantly!
+      document.getElementById('comp-modal-comp-price').innerText = '₩' + realMinCompPrice.toLocaleString();
+      document.getElementById('comp-modal-comp-price').style.color = realGap <= 0 ? '#00e676' : '#ff5252';
+      document.getElementById('comp-modal-status-badge').innerHTML = `<span class="comp-badge comp-badge-${realStatus}">${badgeLabels[realStatus]}</span>`;
+      
+      const updatedGapText = realGap > 0 
+        ? `+₩${realGap.toLocaleString()} (자사가 더 비쌈)` 
+        : realGap < 0 
+        ? `-₩${Math.abs(realGap).toLocaleString()} (자사가 더 저렴)` 
+        : '₩0 (동일가)';
+      document.getElementById('comp-modal-gap').innerText = updatedGapText;
+
+      const updatedStrategy = getCompetitiveStrategy(realStatus);
+      const rec = getRecommendedCpc(item);
+      document.getElementById('comp-modal-strategy').innerHTML = `<strong>${updatedStrategy.emoji} ${updatedStrategy.label}</strong> — ${rec.tip}`;
+      document.getElementById('comp-modal-rec-cpc').innerHTML = `<span style="color:${rec.color};">₩${rec.value.toLocaleString()} <span style="font-size:11px;">${rec.label}</span></span>`;
+      
+      // Also update main table in background
+      renderCompetitiveTable();
+      renderCompetitiveKPIs();
+    }
 
     if (competitors.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.5; padding:20px;">경쟁 업체 데이터가 없습니다.</td></tr>';
