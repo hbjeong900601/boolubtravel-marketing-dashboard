@@ -251,9 +251,9 @@ const elements = {
   compAlertText: document.getElementById('comp-alert-text'),
   compKpiTotal: document.getElementById('comp-kpi-total'),
   compKpiLowest: document.getElementById('comp-kpi-lowest'),
-  compKpiAvgRatio: document.getElementById('comp-kpi-avg-ratio'),
-  compKpiAdvantage: document.getElementById('comp-kpi-advantage'),
+  compKpiClose: document.getElementById('comp-kpi-close'),
   compKpiDisadvantage: document.getElementById('comp-kpi-disadvantage'),
+  compKpiMonopoly: document.getElementById('comp-kpi-monopoly'),
   compStatusFilter: document.getElementById('comp-status-filter'),
   compSortSelect: document.getElementById('comp-sort-select'),
   compTableTbody: document.getElementById('comp-table-tbody'),
@@ -464,8 +464,8 @@ function setupEventListeners() {
   }
   // Competitive Analysis Tab
   elements.compScanAllBtn.addEventListener('click', runCompetitiveScan);
-  elements.compStatusFilter.addEventListener('change', renderCompetitiveTable);
-  elements.compSortSelect.addEventListener('change', renderCompetitiveTable);
+  elements.compStatusFilter.addEventListener('change', filterCompetitiveView);
+  elements.compSortSelect.addEventListener('change', filterCompetitiveView);
   elements.compExportCsvBtn.addEventListener('click', exportCompetitiveCSV);
   elements.compSelectAll.addEventListener('change', handleCompSelectAllToggle);
   elements.compCampaignSelect.addEventListener('change', handleCompCampaignSelection);
@@ -2869,10 +2869,7 @@ async function runGroupCompetitiveScan() {
     saveCompetitiveDataToCache();
 
     elements.compExportCsvBtn.disabled = false;
-    renderCompetitiveTable();
-    renderCompetitiveKPIs();
-    drawCompetitiveChart();
-    renderStrategySummary();
+    filterCompetitiveView();
 
   } catch (err) {
     elements.compGroupScanBtn.disabled = false;
@@ -3311,63 +3308,144 @@ async function navigateToShoppingAd(campaignId, adgroupId, adId) {
   await handleShoppingAdSelection();
 }
 
+window.filterCompetitiveView = function() {
+  renderCompetitiveTable();
+  renderCompetitiveKPIs();
+  drawCompetitiveChart();
+  renderStrategySummary();
+  renderCompetitiveAlertBanner();
+};
+
+window.filterCompetitiveByStatus = function(status) {
+  if (elements.compStatusFilter) {
+    elements.compStatusFilter.value = status;
+  }
+  filterCompetitiveView();
+};
+
 function renderCompetitiveKPIs() {
   const data = getFilteredCompetitiveData();
-  if (data.length === 0) {
-    elements.compKpiTotal.innerText = '0개';
-    elements.compKpiLowest.innerText = '0개';
-    elements.compKpiAdvantage.innerText = '0개';
-    elements.compKpiDisadvantage.innerText = '0개';
-    elements.compKpiAvgRatio.innerText = '-';
-    return;
-  }
+  const currentFilter = elements.compStatusFilter ? elements.compStatusFilter.value : 'all';
+
   const lowestCount = data.filter(d => d.status === 'lowest').length;
-  const advantageCount = data.filter(d => d.status === 'lowest' || (d.gap !== null && d.gap < -(d.price * 0.05))).length;
+  const closeCount = data.filter(d => d.status === 'close').length;
   const disadvantageCount = data.filter(d => d.status === 'disadvantage').length;
-  const withComp = data.filter(d => d.minCompPrice !== null && d.minCompPrice > 0);
-  const avgRatio = withComp.length > 0 ? withComp.reduce((s, d) => s + (d.price / d.minCompPrice), 0) / withComp.length : null;
-  elements.compKpiTotal.innerText = `${data.length}개`;
-  elements.compKpiLowest.innerText = `${lowestCount}개`;
-  elements.compKpiAdvantage.innerText = `${advantageCount}개`;
-  elements.compKpiDisadvantage.innerText = `${disadvantageCount}개`;
-  if (avgRatio !== null) { elements.compKpiAvgRatio.innerText = `${(avgRatio * 100).toFixed(1)}%`; elements.compKpiAvgRatio.style.color = avgRatio <= 1.0 ? '#00e676' : avgRatio <= 1.05 ? '#ffc107' : '#ff5252'; }
-  else { elements.compKpiAvgRatio.innerText = '-'; }
+  const monopolyCount = data.filter(d => d.status === 'monopoly').length;
+
+  if (elements.compKpiTotal) elements.compKpiTotal.innerText = `${data.length}개`;
+  if (elements.compKpiLowest) elements.compKpiLowest.innerText = `${lowestCount}개`;
+  if (elements.compKpiClose) elements.compKpiClose.innerText = `${closeCount}개`;
+  if (elements.compKpiDisadvantage) elements.compKpiDisadvantage.innerText = `${disadvantageCount}개`;
+  if (elements.compKpiMonopoly) elements.compKpiMonopoly.innerText = `${monopolyCount}개`;
+
+  // Highlight KPI card based on filter
+  const cardStatuses = ['all', 'lowest', 'close', 'disadvantage', 'monopoly'];
+  cardStatuses.forEach(s => {
+    const card = document.getElementById(`comp-card-${s}`);
+    if (card) {
+      if (s === currentFilter) {
+        card.style.border = '2px solid var(--color-secondary)';
+        card.style.boxShadow = '0 0 12px rgba(0, 230, 118, 0.25)';
+        card.style.opacity = '1';
+      } else {
+        card.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+        card.style.boxShadow = 'none';
+        card.style.opacity = currentFilter === 'all' ? '1' : '0.6';
+      }
+    }
+  });
 }
 
 function drawCompetitiveChart() {
   const canvas = document.getElementById('comp-distribution-chart');
   if (!canvas) return;
   const data = getFilteredCompetitiveData();
-  if (data.length === 0) {
+  const currentFilter = elements.compStatusFilter ? elements.compStatusFilter.value : 'all';
+
+  let displayData = data;
+  if (currentFilter !== 'all') {
+    displayData = data.filter(d => d.status === currentFilter);
+  }
+
+  if (displayData.length === 0) {
     if (state.charts.competitive) state.charts.competitive.destroy();
-    if (elements.compChartLegend) elements.compChartLegend.innerHTML = '<div style="opacity:0.5; font-size:12px;">데이터가 없습니다.</div>';
+    if (elements.compChartLegend) elements.compChartLegend.innerHTML = '<div style="opacity:0.5; font-size:12px; text-align:center; padding:20px;">필터 데이터가 없습니다.</div>';
     return;
   }
-  const counts = { lowest: data.filter(d => d.status === 'lowest').length, close: data.filter(d => d.status === 'close').length, disadvantage: data.filter(d => d.status === 'disadvantage').length, monopoly: data.filter(d => d.status === 'monopoly').length };
+
+  const counts = {
+    lowest: displayData.filter(d => d.status === 'lowest').length,
+    close: displayData.filter(d => d.status === 'close').length,
+    disadvantage: displayData.filter(d => d.status === 'disadvantage').length,
+    monopoly: displayData.filter(d => d.status === 'monopoly').length
+  };
+
   const ctx = canvas.getContext('2d');
   if (state.charts.competitive) state.charts.competitive.destroy();
+
   const colors = ['#00e676', '#ffc107', '#ff5252', '#a78bfa'];
-  const labels = ['최저가', '근접', '열위', '독점'];
+  const labels = ['🟢 최저가', '🟡 근접', '🔴 열위', '⭐ 독점'];
   const values = [counts.lowest, counts.close, counts.disadvantage, counts.monopoly];
-  state.charts.competitive = new Chart(ctx, { type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const t = ctx.dataset.data.reduce((a,b) => a+b, 0); return `${ctx.label}: ${ctx.raw}개 (${t > 0 ? ((ctx.raw/t)*100).toFixed(1) : 0}%)`; } } } } } });
-  if (elements.compChartLegend) elements.compChartLegend.innerHTML = labels.map((l, i) => `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`).join('');
+
+  state.charts.competitive = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const t = ctx.dataset.data.reduce((a,b) => a+b, 0);
+              return `${ctx.label}: ${ctx.raw}개 (${t > 0 ? ((ctx.raw/t)*100).toFixed(1) : 0}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (elements.compChartLegend) {
+    elements.compChartLegend.innerHTML = labels.map((l, i) =>
+      `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`
+    ).join('');
+  }
 }
 
 function renderStrategySummary() {
   const container = document.getElementById('comp-strategy-summary');
   if (!container) return;
+
   const data = getFilteredCompetitiveData();
-  if (data.length === 0) {
-    container.innerHTML = '<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>';
+  const currentFilter = elements.compStatusFilter ? elements.compStatusFilter.value : 'all';
+
+  let displayData = data;
+  if (currentFilter !== 'all') {
+    displayData = data.filter(d => d.status === currentFilter);
+  }
+
+  if (displayData.length === 0) {
+    container.innerHTML = '<p style="opacity:0.5;text-align:center;padding:20px;">필터 조건에 해당되는 분석 데이터가 없습니다.</p>';
     return;
   }
-  const lc = data.filter(d => d.status === 'lowest').length, cc = data.filter(d => d.status === 'close').length, dc = data.filter(d => d.status === 'disadvantage').length, mc = data.filter(d => d.status === 'monopoly').length;
+
+  const lc = displayData.filter(d => d.status === 'lowest').length;
+  const cc = displayData.filter(d => d.status === 'close').length;
+  const dc = displayData.filter(d => d.status === 'disadvantage').length;
+  const mc = displayData.filter(d => d.status === 'monopoly').length;
+
   const items = [];
-  if (lc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lc}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있으므로 전환율이 높습니다.</div></div>`);
-  if (cc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟡</span><div><strong>근접 ${cc}개 상품</strong> — 현 입찰가를 유지하되, 리뷰 수·배송 속도·부가 서비스 등 비가격 차별화 포인트를 강조하세요.</div></div>`);
-  if (dc > 0) { const top = data.filter(d => d.status === 'disadvantage').sort((a,b) => b.gap - a.gap).slice(0,3); items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${dc}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나, 가격 인하 프로모션을 검토하세요. 주요: ${top.map(d => `"${d.adName.substring(0,20)}…" (+₩${d.gap.toLocaleString()})`).join(', ')}</div></div>`); }
-  if (mc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${mc}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가로 효율적 운영이 가능합니다.</div></div>`);
-  if (items.length === 0) items.push(`<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>`);
+  if (lc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lc}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있어 전환율이 매우 높습니다.</div></div>`);
+  if (cc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟡</span><div><strong>근접 ${cc}개 상품</strong> — 현 입찰가를 유지하되, 리뷰 수·배송 속도·부가 혜택 등 차별화 요소를 강화하세요.</div></div>`);
+  if (dc > 0) {
+    const top = displayData.filter(d => d.status === 'disadvantage').sort((a,b) => b.gap - a.gap).slice(0,3);
+    items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${dc}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나 가격 인하 프로모션을 검토하세요. 주요 열위: ${top.map(d => `"${d.adName.substring(0,18)}…" (+₩${d.gap.toLocaleString()})`).join(', ')}</div></div>`);
+  }
+  if (mc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${mc}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가(₩50~150)로 최고 효율 운영을 권장합니다.</div></div>`);
+  
   container.innerHTML = items.join('');
 }
 
