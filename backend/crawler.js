@@ -285,8 +285,8 @@ function getMockCompetitors(keyword, price, catalogId) {
 
   const isRoaming = keyword.includes('이심') || keyword.includes('esim') || keyword.includes('유심') || keyword.includes('로밍') || keyword.includes('데이터');
 
-  // Check if keyword implies an exclusive/monopoly offer
-  const isMonopoly = keyword.includes('단독') || keyword.includes('독점') || keyword.includes('B00') || (Math.random() < 0.15);
+  // Check if keyword explicitly implies an exclusive/monopoly offer
+  const isMonopoly = keyword.includes('단독판매') || keyword.includes('독점상품') || keyword.includes('단독특가');
   if (isMonopoly) {
     return {
       keyword,

@@ -3124,9 +3124,21 @@ window.openCompDetailModal = async function(adIdOrIdx) {
       document.getElementById('comp-modal-strategy').innerHTML = `<strong>${updatedStrategy.emoji} ${updatedStrategy.label}</strong> — ${rec.tip}`;
       document.getElementById('comp-modal-rec-cpc').innerHTML = `<span style="color:${rec.color};">₩${rec.value.toLocaleString()} <span style="font-size:11px;">${rec.label}</span></span>`;
       
-      // Also update main table in background
-      renderCompetitiveTable();
-      renderCompetitiveKPIs();
+    } else {
+      item.minCompPrice = null;
+      item.minCompName = '-';
+      item.gap = null;
+      item.status = 'monopoly';
+      item.competitorCount = 0;
+
+      document.getElementById('comp-modal-comp-price').innerText = '경쟁사 없음';
+      document.getElementById('comp-modal-comp-price').style.color = 'var(--text-muted)';
+      document.getElementById('comp-modal-status-badge').innerHTML = `<span class="comp-badge comp-badge-monopoly">${badgeLabels.monopoly}</span>`;
+      document.getElementById('comp-modal-gap').innerText = '-';
+      const updatedStrategy = getCompetitiveStrategy('monopoly');
+      const rec = getRecommendedCpc(item);
+      document.getElementById('comp-modal-strategy').innerHTML = `<strong>${updatedStrategy.emoji} ${updatedStrategy.label}</strong> — ${rec.tip}`;
+      document.getElementById('comp-modal-rec-cpc').innerHTML = `<span style="color:${rec.color};">₩${rec.value.toLocaleString()} <span style="font-size:11px;">${rec.label}</span></span>`;
     }
 
     if (competitors.length === 0) {
