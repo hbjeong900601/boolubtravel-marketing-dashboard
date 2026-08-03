@@ -124,7 +124,9 @@ function extractCoreKeywords(rawTitle) {
 
 /**
  * Scrapes REAL Naver Shopping search results using stealth headless Chrome.
- * NO fake data. NO mock fallback. 100% real data or honest empty result.
+ * Two-stage strategy:
+ *   1. search.shopping.naver.com (direct shopping search)
+ *   2. search.naver.com integrated search (fallback - different IP blocking)
  */
 async function scrapeNaverShopping(keyword, price, catalogId) {
   if (!keyword) {
@@ -134,112 +136,162 @@ async function scrapeNaverShopping(keyword, price, catalogId) {
   await waitForRateLimit();
 
   const searchQuery = extractCoreKeywords(keyword);
-  const searchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(searchQuery)}`;
 
   console.log(`[Crawler] Original title: "${keyword}"`);
   console.log(`[Crawler] Extracted keywords: "${searchQuery}"`);
-  console.log(`[Crawler] Search URL: ${searchUrl}`);
 
   let page = null;
   try {
     const browser = await getBrowser();
     page = await browser.newPage();
-
-    // Apply stealth techniques
     await applyStealthToPage(page);
-
     await page.setViewport({ width: 1920, height: 1080 });
     await page.setUserAgent(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36'
     );
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-    });
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7' });
 
-    // Navigate
-    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+    // ──────────────────────────────────────────────
+    // STAGE 1: Direct Naver Shopping Search
+    // ──────────────────────────────────────────────
+    const shoppingUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(searchQuery)}`;
+    console.log(`[Crawler] Stage 1: Direct shopping search...`);
+    await page.goto(shoppingUrl, { waitUntil: 'networkidle2', timeout: 25000 });
 
-    // Check for blocking page
     const isBlocked = await page.evaluate(() => {
       return document.body?.innerText?.includes('접속이 일시적으로 제한') || false;
     });
 
-    if (isBlocked) {
-      console.log(`[Crawler] ⛔ IP temporarily blocked by Naver Shopping. Will retry later.`);
-      await page.close();
-      return { keyword, success: true, source: 'ip_blocked', competitors: [] };
+    if (!isBlocked) {
+      // Try to extract from __NEXT_DATA__
+      await page.waitForSelector('#__NEXT_DATA__', { timeout: 5000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 1000));
+
+      const directResults = await page.evaluate(() => {
+        const results = [];
+        const nextDataEl = document.getElementById('__NEXT_DATA__');
+        if (nextDataEl) {
+          try {
+            const json = JSON.parse(nextDataEl.textContent);
+            const products =
+              json.props?.pageProps?.initialState?.products?.list ||
+              json.props?.pageProps?.initialState?.searchResult?.products?.list || [];
+            products.forEach((item, idx) => {
+              const p = item.item;
+              if (!p) return;
+              const mallName = p.mallName || p.crMallName || '';
+              const productName = p.productName || '';
+              const itemPrice = parseInt(p.price || '0', 10);
+              const url = p.crUrl || p.adcrUrl || p.pcUrl || '';
+              if (mallName && itemPrice > 0) {
+                results.push({ rank: idx + 1, name: mallName, productName, price: itemPrice, url });
+              }
+            });
+          } catch (e) { /* ignore */ }
+        }
+        return results;
+      });
+
+      if (directResults.length > 0) {
+        await page.close(); page = null;
+        directResults.sort((a, b) => a.price - b.price);
+        console.log(`[Crawler] ✅ Stage 1 SUCCESS: ${directResults.length} REAL competitors from direct shopping!`);
+        directResults.slice(0, 5).forEach(c => {
+          console.log(`  [${c.name}] ₩${c.price.toLocaleString()} — ${c.productName.substring(0, 50)}`);
+        });
+        return { keyword, success: true, source: 'puppeteer_real', competitors: directResults };
+      }
+      console.log(`[Crawler] Stage 1: No results from direct shopping search, trying Stage 2...`);
+    } else {
+      console.log(`[Crawler] Stage 1: Shopping search IP blocked, trying Stage 2 fallback...`);
     }
 
-    // Wait for content
-    await page.waitForSelector('[class*="product_item"], #__NEXT_DATA__', { timeout: 10000 }).catch(() => {});
-    await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+    // ──────────────────────────────────────────────
+    // STAGE 2: Naver Integrated Search (search.naver.com)
+    // Different IP blocking policy - typically not blocked
+    // ──────────────────────────────────────────────
+    const integratedUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(searchQuery)}`;
+    console.log(`[Crawler] Stage 2: Integrated search fallback...`);
+    await page.goto(integratedUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+    await new Promise(r => setTimeout(r, 1500 + Math.random() * 500));
 
-    // Extract competitor data
-    const competitors = await page.evaluate(() => {
+    const integratedResults = await page.evaluate(() => {
       const results = [];
+      // Find the shopping section ("네이버 가격비교")
+      const sections = document.querySelectorAll('section');
+      let shopSection = null;
+      sections.forEach(s => {
+        const h = s.querySelector('h2, h3');
+        if (h && h.textContent.includes('가격비교')) shopSection = s;
+      });
+      if (!shopSection) return results;
 
-      // Strategy 1: __NEXT_DATA__ JSON
-      const nextDataEl = document.getElementById('__NEXT_DATA__');
-      if (nextDataEl) {
-        try {
-          const json = JSON.parse(nextDataEl.textContent);
-          const products =
-            json.props?.pageProps?.initialState?.products?.list ||
-            json.props?.pageProps?.initialState?.searchResult?.products?.list ||
-            [];
+      // Product title links have class containing 'GBrjh9Fl'
+      // Mall name links have class containing 'iMhVFYLc'
+      // Price spans have class containing 'lfETsaia'
+      const titleLinks = shopSection.querySelectorAll('a[class*="GBrjh9Fl"]');
+      titleLinks.forEach((link, idx) => {
+        const card = link.closest('li') || link.closest('div')?.parentElement?.closest('div');
+        if (!card) return;
 
-          products.forEach((item, idx) => {
-            const p = item.item;
-            if (!p) return;
-            const mallName = p.mallName || p.crMallName || '';
-            const productName = p.productName || '';
-            const itemPrice = parseInt(p.price || '0', 10);
-            const url = p.crUrl || p.adcrUrl || p.pcUrl || '';
+        const productName = link.textContent.trim();
+        const url = link.href || '';
 
-            if (mallName && itemPrice > 0) {
-              results.push({ rank: idx + 1, name: mallName, productName, price: itemPrice, url });
-            }
-          });
-        } catch (e) { /* ignore */ }
-      }
+        // Find mall name
+        const mallLink = card.querySelector('a[class*="iMhVFYLc"]');
+        const mallName = mallLink ? mallLink.textContent.trim() : '';
 
-      // Strategy 2: DOM fallback
+        // Find price - get the lowest price in the card
+        const priceSpans = card.querySelectorAll('span[class*="lfETsaia"]');
+        let itemPrice = 0;
+        priceSpans.forEach(ps => {
+          const val = parseInt(ps.textContent.replace(/[^0-9]/g, ''), 10);
+          if (val > 0 && (itemPrice === 0 || val < itemPrice)) itemPrice = val;
+        });
+
+        if (productName && itemPrice > 0) {
+          results.push({ rank: idx + 1, name: mallName || '쇼핑몰', productName, price: itemPrice, url });
+        }
+      });
+
+      // Fallback: if class-based selectors fail, try broader approach
       if (results.length === 0) {
-        document.querySelectorAll('[class*="product_item"]').forEach((el, idx) => {
-          const titleEl = el.querySelector('[class*="product_title"] a, [class*="productTitle"] a');
-          const priceEl = el.querySelector('[class*="price_num"], [class*="price_info"] em');
-          const mallEl = el.querySelector('[class*="product_mall_"] img') || el.querySelector('[class*="product_mall"]');
-          const linkEl = el.querySelector('[class*="product_title"] a');
-
-          const productName = titleEl ? titleEl.textContent.trim() : '';
-          const priceText = priceEl ? priceEl.textContent.replace(/[^0-9]/g, '') : '0';
-          const itemPrice = parseInt(priceText, 10);
-          const mallName = mallEl ? (mallEl.getAttribute('alt') || mallEl.textContent.trim()) : '';
-          const url = linkEl ? linkEl.getAttribute('href') || '' : '';
-
-          if (mallName && itemPrice > 0) {
-            results.push({ rank: idx + 1, name: mallName, productName, price: itemPrice, url });
+        const allLinks = shopSection.querySelectorAll('a');
+        let linkPairs = [];
+        allLinks.forEach(a => {
+          const text = (a.textContent || '').trim();
+          const href = a.href || '';
+          if (text.length > 10 && text.length < 120 && !text.includes('광고') && href.includes('shopping')) {
+            // Find price near this link
+            const parent = a.closest('li') || a.closest('div');
+            if (parent) {
+              const priceMatch = parent.innerText.match(/([0-9,]+)원?/);
+              if (priceMatch) {
+                const price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
+                if (price > 0) linkPairs.push({ productName: text, price, url: href, name: '쇼핑몰' });
+              }
+            }
           }
         });
+        linkPairs.forEach((lp, i) => results.push({ rank: i + 1, ...lp }));
       }
 
       return results;
     });
 
-    await page.close();
-    page = null;
+    await page.close(); page = null;
 
-    if (competitors.length > 0) {
-      competitors.sort((a, b) => a.price - b.price);
-      console.log(`[Crawler] ✅ Found ${competitors.length} REAL competitors!`);
-      competitors.slice(0, 5).forEach(c => {
-        console.log(`  [${c.rank}] ${c.name}: ₩${c.price.toLocaleString()} — ${c.productName.substring(0, 50)}`);
+    if (integratedResults.length > 0) {
+      integratedResults.sort((a, b) => a.price - b.price);
+      console.log(`[Crawler] ✅ Stage 2 SUCCESS: ${integratedResults.length} REAL competitors from integrated search!`);
+      integratedResults.slice(0, 5).forEach(c => {
+        console.log(`  [${c.name}] ₩${c.price.toLocaleString()} — ${c.productName.substring(0, 50)}`);
       });
-      return { keyword, success: true, source: 'puppeteer_real', competitors };
-    } else {
-      console.log(`[Crawler] ⚠️ No results for "${searchQuery}" — returning empty (NO FAKE DATA).`);
-      return { keyword, success: true, source: 'no_results', competitors: [] };
+      return { keyword, success: true, source: 'puppeteer_real', competitors: integratedResults };
     }
+
+    console.log(`[Crawler] ⚠️ Both stages returned no results for "${searchQuery}"`);
+    return { keyword, success: true, source: 'no_results', competitors: [] };
   } catch (error) {
     console.error(`[Crawler] ❌ Scraping failed:`, error.message);
     if (page) { try { await page.close(); } catch (e) {} }
