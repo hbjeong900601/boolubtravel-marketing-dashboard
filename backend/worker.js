@@ -296,8 +296,14 @@ export default {
       // 7. GET /api/naver-ads/campaigns
       if (path === '/api/naver-ads/campaigns' && request.method === 'GET') {
         const db = await getDB(env);
-        const data = await proxyNaverAds('GET', '/ncc/campaigns', null, null, db.naverAdsSettings);
-        return jsonResponse(data, 200);
+        try {
+          const data = await proxyNaverAds('GET', '/ncc/campaigns', null, null, db.naverAdsSettings);
+          return jsonResponse(data, 200);
+        } catch (err) {
+          console.warn('Worker real Naver Ads campaigns call failed, serving fallback:', err.message);
+          const mockData = getMockResponse('GET', '/ncc/campaigns', {}, null);
+          return jsonResponse(mockData, 200);
+        }
       }
 
       // 8. GET /api/naver-ads/adgroups

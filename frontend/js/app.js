@@ -251,9 +251,9 @@ const elements = {
   compAlertText: document.getElementById('comp-alert-text'),
   compKpiTotal: document.getElementById('comp-kpi-total'),
   compKpiLowest: document.getElementById('comp-kpi-lowest'),
-  compKpiClose: document.getElementById('comp-kpi-close'),
+  compKpiAvgRatio: document.getElementById('comp-kpi-avg-ratio'),
+  compKpiAdvantage: document.getElementById('comp-kpi-advantage'),
   compKpiDisadvantage: document.getElementById('comp-kpi-disadvantage'),
-  compKpiMonopoly: document.getElementById('comp-kpi-monopoly'),
   compStatusFilter: document.getElementById('comp-status-filter'),
   compSortSelect: document.getElementById('comp-sort-select'),
   compTableTbody: document.getElementById('comp-table-tbody'),
@@ -280,22 +280,26 @@ async function initApp() {
   setupEventListeners();
   showLoader('데이터 로딩 중...');
   
-  // 1. Fetch Naver Ad settings and connection status
-  await fetchSettings();
-  
-  // 2. Fetch Products
-  await fetchProducts();
-  
-  // 3. Fetch Campaigns
-  await fetchCampaigns();
-  
-  // 4. Render Initial Views
-  renderOverviewInsights();
-  renderCampaignsTable();
-  renderProductsTable();
-  updateOverviewKPIs();
-  
-  hideLoader();
+  try {
+    // 1. Fetch Naver Ad settings and connection status
+    await fetchSettings();
+    
+    // 2. Fetch Products
+    await fetchProducts();
+    
+    // 3. Fetch Campaigns
+    await fetchCampaigns();
+    
+    // 4. Render Initial Views
+    renderOverviewInsights();
+    renderCampaignsTable();
+    renderProductsTable();
+    await updateOverviewKPIs();
+  } catch (err) {
+    console.error('Error during app initialization:', err);
+  } finally {
+    hideLoader();
+  }
 
   // 5. Initialize Competitive Auto-Scan System
   initCompetitiveAutoScan();
@@ -464,8 +468,8 @@ function setupEventListeners() {
   }
   // Competitive Analysis Tab
   elements.compScanAllBtn.addEventListener('click', runCompetitiveScan);
-  elements.compStatusFilter.addEventListener('change', filterCompetitiveView);
-  elements.compSortSelect.addEventListener('change', filterCompetitiveView);
+  elements.compStatusFilter.addEventListener('change', renderCompetitiveTable);
+  elements.compSortSelect.addEventListener('change', renderCompetitiveTable);
   elements.compExportCsvBtn.addEventListener('click', exportCompetitiveCSV);
   elements.compSelectAll.addEventListener('change', handleCompSelectAllToggle);
   elements.compCampaignSelect.addEventListener('change', handleCompCampaignSelection);
@@ -647,20 +651,34 @@ async function fetchSettings() {
 async function fetchProducts() {
   try {
     const res = await resilientFetch(`/api/products`);
-    state.products = await res.json();
+    if (res.ok) {
+      const data = await res.json();
+      state.products = Array.isArray(data) ? data : [];
+    } else {
+      console.warn('Failed to fetch products, status:', res.status);
+      state.products = [];
+    }
   } catch (err) {
     console.error('Failed to fetch products:', err);
+    state.products = [];
   }
 }
 
 async function fetchCampaigns() {
   try {
     const res = await resilientFetch(`/api/naver-ads/campaigns`);
-    state.campaigns = await res.json();
+    if (res.ok) {
+      const data = await res.json();
+      state.campaigns = Array.isArray(data) ? data : [];
+    } else {
+      console.warn('Failed to fetch campaigns, status:', res.status);
+      state.campaigns = [];
+    }
     populateCampaignDropdown();
     populateCompCampaignDropdown();
   } catch (err) {
     console.error('Failed to fetch campaigns:', err);
+    state.campaigns = [];
   }
 }
 
@@ -683,16 +701,17 @@ function updateConnectionStatusUI() {
 
 async function updateOverviewKPIs() {
   const isRealConnection = state.settings && state.settings.isConnected;
+  const campaignsList = Array.isArray(state.campaigns) ? state.campaigns : [];
   
   let activeDailyBudgetSum = 0;
-  state.campaigns.forEach(c => {
+  campaignsList.forEach(c => {
     const isActive = c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false;
     if (isActive) {
       activeDailyBudgetSum += (c.dailyBudget !== undefined ? c.dailyBudget : (c.userLimitAmt || 0));
     }
   });
 
-  const activeCampaigns = state.campaigns.filter(c => {
+  const activeCampaigns = campaignsList.filter(c => {
     return c.useYn !== undefined ? c.useYn === 'Y' : c.userLock === false;
   });
   const activeIds = activeCampaigns.map(c => c.nccCampaignId).join(',');
@@ -1028,14 +1047,17 @@ function renderOverviewInsights() {
 
 function renderCampaignsTable() {
   const tbody = elements.overviewCampaignTableBody;
+  if (!tbody) return;
   tbody.innerHTML = '';
 
-  if (state.campaigns.length === 0) {
+  const campaigns = Array.isArray(state.campaigns) ? state.campaigns : [];
+
+  if (campaigns.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">조회된 네이버 검색광고 캠페인이 없습니다.</td></tr>`;
     return;
   }
 
-  state.campaigns.forEach(c => {
+  campaigns.forEach(c => {
     const tr = document.createElement('tr');
     
     // Status Badge
@@ -1084,12 +1106,14 @@ function renderProductsTable() {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  if (state.products.length === 0) {
+  const products = Array.isArray(state.products) ? state.products : [];
+
+  if (products.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">등록된 여행 상품이 없습니다.</td></tr>`;
     return;
   }
 
-  state.products.forEach(p => {
+  products.forEach(p => {
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
     tr.className = state.selectedProduct?.id === p.id ? 'active-row' : '';
@@ -2593,15 +2617,18 @@ function loadCachedCompetitiveData() {
     const cached = localStorage.getItem(COMP_CACHE_KEY);
     const cachedTime = localStorage.getItem(COMP_SCAN_TIME_KEY);
     if (cached && cachedTime) {
-      const parsedData = JSON.parse(cached);
-      // Recalculate status for cached items with updated formula
-      state.competitiveData = parsedData.map(item => ({
-        ...item,
-        status: getCompetitiveStatus(item.price, item.minCompPrice, item.competitorCount || 0)
-      }));
+      state.competitiveData = JSON.parse(cached);
       elements.compLastScanTime.innerText = formatScanTime(new Date(parseInt(cachedTime, 10)));
-      filterCompetitiveView();
+      renderCompetitiveTable();
+      renderCompetitiveKPIs();
+      drawCompetitiveChart();
+      renderStrategySummary();
       elements.compExportCsvBtn.disabled = false;
+      const disadvantaged = state.competitiveData.filter(d => d.status === 'disadvantage');
+      if (disadvantaged.length > 0) {
+        elements.compAlertBanner.style.display = 'flex';
+        elements.compAlertText.innerText = `⚠️ ${disadvantaged.length}개 상품에서 자사 가격이 경쟁사보다 높습니다.`;
+      }
     }
   } catch (e) { console.warn('Cache load failed:', e); }
 }
@@ -2716,21 +2743,11 @@ async function runCompetitiveScan(isAuto = false) {
 }
 
 function getCompetitiveStatus(ourPrice, minCompPrice, count) {
-  if (count === 0 || minCompPrice === null || minCompPrice <= 0) return 'monopoly';
-  
-  const diff = ourPrice - minCompPrice;
-  const ratio = ourPrice / minCompPrice;
-
-  if (diff < 0) {
-    // 자사 가격이 경쟁사 최저가보다 명확히 저렴함
-    return 'lowest';
-  } else if (diff === 0 || (ratio >= 1.0 && ratio <= 1.03)) {
-    // 자사 가격이 경쟁사와 동일하거나 3% 이내 미세 차이
-    return 'close';
-  } else {
-    // 자사 가격이 경쟁사 최저가보다 3% 이상 비쌈
-    return 'disadvantage';
-  }
+  if (count === 0 || minCompPrice === null) return 'monopoly';
+  const r = ourPrice / minCompPrice;
+  if (r <= 1.0) return 'lowest';
+  if (r <= 1.05) return 'close';
+  return 'disadvantage';
 }
 
 function getCompetitiveStrategy(status) {
@@ -2876,7 +2893,10 @@ async function runGroupCompetitiveScan() {
     saveCompetitiveDataToCache();
 
     elements.compExportCsvBtn.disabled = false;
-    filterCompetitiveView();
+    renderCompetitiveTable();
+    renderCompetitiveKPIs();
+    drawCompetitiveChart();
+    renderStrategySummary();
 
   } catch (err) {
     elements.compGroupScanBtn.disabled = false;
@@ -3315,144 +3335,63 @@ async function navigateToShoppingAd(campaignId, adgroupId, adId) {
   await handleShoppingAdSelection();
 }
 
-window.filterCompetitiveView = function() {
-  renderCompetitiveTable();
-  renderCompetitiveKPIs();
-  drawCompetitiveChart();
-  renderStrategySummary();
-  renderCompetitiveAlertBanner();
-};
-
-window.filterCompetitiveByStatus = function(status) {
-  if (elements.compStatusFilter) {
-    elements.compStatusFilter.value = status;
-  }
-  filterCompetitiveView();
-};
-
 function renderCompetitiveKPIs() {
   const data = getFilteredCompetitiveData();
-  const currentFilter = elements.compStatusFilter ? elements.compStatusFilter.value : 'all';
-
+  if (data.length === 0) {
+    elements.compKpiTotal.innerText = '0개';
+    elements.compKpiLowest.innerText = '0개';
+    elements.compKpiAdvantage.innerText = '0개';
+    elements.compKpiDisadvantage.innerText = '0개';
+    elements.compKpiAvgRatio.innerText = '-';
+    return;
+  }
   const lowestCount = data.filter(d => d.status === 'lowest').length;
-  const closeCount = data.filter(d => d.status === 'close').length;
+  const advantageCount = data.filter(d => d.status === 'lowest' || (d.gap !== null && d.gap < -(d.price * 0.05))).length;
   const disadvantageCount = data.filter(d => d.status === 'disadvantage').length;
-  const monopolyCount = data.filter(d => d.status === 'monopoly').length;
-
-  if (elements.compKpiTotal) elements.compKpiTotal.innerText = `${data.length}개`;
-  if (elements.compKpiLowest) elements.compKpiLowest.innerText = `${lowestCount}개`;
-  if (elements.compKpiClose) elements.compKpiClose.innerText = `${closeCount}개`;
-  if (elements.compKpiDisadvantage) elements.compKpiDisadvantage.innerText = `${disadvantageCount}개`;
-  if (elements.compKpiMonopoly) elements.compKpiMonopoly.innerText = `${monopolyCount}개`;
-
-  // Highlight KPI card based on filter
-  const cardStatuses = ['all', 'lowest', 'close', 'disadvantage', 'monopoly'];
-  cardStatuses.forEach(s => {
-    const card = document.getElementById(`comp-card-${s}`);
-    if (card) {
-      if (s === currentFilter) {
-        card.style.border = '2px solid var(--color-secondary)';
-        card.style.boxShadow = '0 0 12px rgba(0, 230, 118, 0.25)';
-        card.style.opacity = '1';
-      } else {
-        card.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-        card.style.boxShadow = 'none';
-        card.style.opacity = currentFilter === 'all' ? '1' : '0.6';
-      }
-    }
-  });
+  const withComp = data.filter(d => d.minCompPrice !== null && d.minCompPrice > 0);
+  const avgRatio = withComp.length > 0 ? withComp.reduce((s, d) => s + (d.price / d.minCompPrice), 0) / withComp.length : null;
+  elements.compKpiTotal.innerText = `${data.length}개`;
+  elements.compKpiLowest.innerText = `${lowestCount}개`;
+  elements.compKpiAdvantage.innerText = `${advantageCount}개`;
+  elements.compKpiDisadvantage.innerText = `${disadvantageCount}개`;
+  if (avgRatio !== null) { elements.compKpiAvgRatio.innerText = `${(avgRatio * 100).toFixed(1)}%`; elements.compKpiAvgRatio.style.color = avgRatio <= 1.0 ? '#00e676' : avgRatio <= 1.05 ? '#ffc107' : '#ff5252'; }
+  else { elements.compKpiAvgRatio.innerText = '-'; }
 }
 
 function drawCompetitiveChart() {
   const canvas = document.getElementById('comp-distribution-chart');
   if (!canvas) return;
   const data = getFilteredCompetitiveData();
-  const currentFilter = elements.compStatusFilter ? elements.compStatusFilter.value : 'all';
-
-  let displayData = data;
-  if (currentFilter !== 'all') {
-    displayData = data.filter(d => d.status === currentFilter);
-  }
-
-  if (displayData.length === 0) {
+  if (data.length === 0) {
     if (state.charts.competitive) state.charts.competitive.destroy();
-    if (elements.compChartLegend) elements.compChartLegend.innerHTML = '<div style="opacity:0.5; font-size:12px; text-align:center; padding:20px;">필터 데이터가 없습니다.</div>';
+    if (elements.compChartLegend) elements.compChartLegend.innerHTML = '<div style="opacity:0.5; font-size:12px;">데이터가 없습니다.</div>';
     return;
   }
-
-  const counts = {
-    lowest: displayData.filter(d => d.status === 'lowest').length,
-    close: displayData.filter(d => d.status === 'close').length,
-    disadvantage: displayData.filter(d => d.status === 'disadvantage').length,
-    monopoly: displayData.filter(d => d.status === 'monopoly').length
-  };
-
+  const counts = { lowest: data.filter(d => d.status === 'lowest').length, close: data.filter(d => d.status === 'close').length, disadvantage: data.filter(d => d.status === 'disadvantage').length, monopoly: data.filter(d => d.status === 'monopoly').length };
   const ctx = canvas.getContext('2d');
   if (state.charts.competitive) state.charts.competitive.destroy();
-
   const colors = ['#00e676', '#ffc107', '#ff5252', '#a78bfa'];
-  const labels = ['🟢 최저가', '🟡 근접', '🔴 열위', '⭐ 독점'];
+  const labels = ['최저가', '근접', '열위', '독점'];
   const values = [counts.lowest, counts.close, counts.disadvantage, counts.monopoly];
-
-  state.charts.competitive = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '65%',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const t = ctx.dataset.data.reduce((a,b) => a+b, 0);
-              return `${ctx.label}: ${ctx.raw}개 (${t > 0 ? ((ctx.raw/t)*100).toFixed(1) : 0}%)`;
-            }
-          }
-        }
-      }
-    }
-  });
-
-  if (elements.compChartLegend) {
-    elements.compChartLegend.innerHTML = labels.map((l, i) =>
-      `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`
-    ).join('');
-  }
+  state.charts.competitive = new Chart(ctx, { type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const t = ctx.dataset.data.reduce((a,b) => a+b, 0); return `${ctx.label}: ${ctx.raw}개 (${t > 0 ? ((ctx.raw/t)*100).toFixed(1) : 0}%)`; } } } } } });
+  if (elements.compChartLegend) elements.compChartLegend.innerHTML = labels.map((l, i) => `<div class="comp-legend-item"><span class="comp-legend-dot" style="background:${colors[i]}"></span><span>${l} ${values[i]}개</span></div>`).join('');
 }
 
 function renderStrategySummary() {
   const container = document.getElementById('comp-strategy-summary');
   if (!container) return;
-
   const data = getFilteredCompetitiveData();
-  const currentFilter = elements.compStatusFilter ? elements.compStatusFilter.value : 'all';
-
-  let displayData = data;
-  if (currentFilter !== 'all') {
-    displayData = data.filter(d => d.status === currentFilter);
-  }
-
-  if (displayData.length === 0) {
-    container.innerHTML = '<p style="opacity:0.5;text-align:center;padding:20px;">필터 조건에 해당되는 분석 데이터가 없습니다.</p>';
+  if (data.length === 0) {
+    container.innerHTML = '<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>';
     return;
   }
-
-  const lc = displayData.filter(d => d.status === 'lowest').length;
-  const cc = displayData.filter(d => d.status === 'close').length;
-  const dc = displayData.filter(d => d.status === 'disadvantage').length;
-  const mc = displayData.filter(d => d.status === 'monopoly').length;
-
+  const lc = data.filter(d => d.status === 'lowest').length, cc = data.filter(d => d.status === 'close').length, dc = data.filter(d => d.status === 'disadvantage').length, mc = data.filter(d => d.status === 'monopoly').length;
   const items = [];
-  if (lc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lc}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있어 전환율이 매우 높습니다.</div></div>`);
-  if (cc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟡</span><div><strong>근접 ${cc}개 상품</strong> — 현 입찰가를 유지하되, 리뷰 수·배송 속도·부가 혜택 등 차별화 요소를 강화하세요.</div></div>`);
-  if (dc > 0) {
-    const top = displayData.filter(d => d.status === 'disadvantage').sort((a,b) => b.gap - a.gap).slice(0,3);
-    items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${dc}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나 가격 인하 프로모션을 검토하세요. 주요 열위: ${top.map(d => `"${d.adName.substring(0,18)}…" (+₩${d.gap.toLocaleString()})`).join(', ')}</div></div>`);
-  }
-  if (mc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${mc}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가(₩50~150)로 최고 효율 운영을 권장합니다.</div></div>`);
-  
+  if (lc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟢</span><div><strong>최저가 ${lc}개 상품</strong> — CPC를 공격적으로 올려 상위 노출 점유율을 확대하세요. 가격 우위가 있으므로 전환율이 높습니다.</div></div>`);
+  if (cc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">🟡</span><div><strong>근접 ${cc}개 상품</strong> — 현 입찰가를 유지하되, 리뷰 수·배송 속도·부가 서비스 등 비가격 차별화 포인트를 강조하세요.</div></div>`);
+  if (dc > 0) { const top = data.filter(d => d.status === 'disadvantage').sort((a,b) => b.gap - a.gap).slice(0,3); items.push(`<div class="comp-strategy-item"><span class="emoji">🔴</span><div><strong>열위 ${dc}개 상품 — 즉각 조치 필요!</strong><br>입찰가를 낮추거나, 가격 인하 프로모션을 검토하세요. 주요: ${top.map(d => `"${d.adName.substring(0,20)}…" (+₩${d.gap.toLocaleString()})`).join(', ')}</div></div>`); }
+  if (mc > 0) items.push(`<div class="comp-strategy-item"><span class="emoji">⭐</span><div><strong>독점 ${mc}개 상품</strong> — 경쟁사 없이 독점 노출 중입니다. 최소 입찰가로 효율적 운영이 가능합니다.</div></div>`);
+  if (items.length === 0) items.push(`<p style="opacity:0.5;text-align:center;padding:20px;">분석 결과가 없습니다.</p>`);
   container.innerHTML = items.join('');
 }
 

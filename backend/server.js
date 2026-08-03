@@ -305,7 +305,9 @@ app.get('/api/naver-ads/campaigns', async (req, res) => {
     const campaigns = await adApi.getCampaigns();
     res.json(campaigns);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.warn('Real Naver Ads campaigns call failed, serving simulation fallback:', err.message);
+    const mockCampaigns = adApi.getMockResponse('GET', '/ncc/campaigns');
+    res.json(mockCampaigns);
   }
 });
 
