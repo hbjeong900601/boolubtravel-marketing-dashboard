@@ -223,9 +223,7 @@ app.post('/api/crawler/match', async (req, res) => {
   const result = await scrapeNaverShopping(
     searchKeyword, 
     price, 
-    catalogId, 
-    settings.naverOpenClientId, 
-    settings.naverOpenClientSecret
+    catalogId
   );
 
   if (result.success) {
