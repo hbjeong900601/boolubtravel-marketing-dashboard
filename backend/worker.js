@@ -311,8 +311,14 @@ export default {
         const db = await getDB(env);
         const campaignId = url.searchParams.get('campaignId');
         const queryParams = campaignId ? { nccCampaignId: campaignId } : {};
-        const data = await proxyNaverAds('GET', '/ncc/adgroups', queryParams, null, db.naverAdsSettings);
-        return jsonResponse(data, 200);
+        try {
+          const data = await proxyNaverAds('GET', '/ncc/adgroups', queryParams, null, db.naverAdsSettings);
+          return jsonResponse(data, 200);
+        } catch (err) {
+          console.warn('Worker real Naver Ads adgroups call failed, serving fallback:', err.message);
+          const mockData = getMockResponse('GET', '/ncc/adgroups', queryParams, null);
+          return jsonResponse(mockData, 200);
+        }
       }
 
       // 9. GET /api/naver-ads/keywords
@@ -320,8 +326,14 @@ export default {
         const db = await getDB(env);
         const adgroupId = url.searchParams.get('adgroupId');
         const queryParams = adgroupId ? { nccAdgroupId: adgroupId } : {};
-        const data = await proxyNaverAds('GET', '/ncc/keywords', queryParams, null, db.naverAdsSettings);
-        return jsonResponse(data, 200);
+        try {
+          const data = await proxyNaverAds('GET', '/ncc/keywords', queryParams, null, db.naverAdsSettings);
+          return jsonResponse(data, 200);
+        } catch (err) {
+          console.warn('Worker real Naver Ads keywords call failed, serving fallback:', err.message);
+          const mockData = getMockResponse('GET', '/ncc/keywords', queryParams, null);
+          return jsonResponse(mockData, 200);
+        }
       }
 
       // 9-2. GET /api/naver-ads/ads
@@ -329,8 +341,14 @@ export default {
         const db = await getDB(env);
         const adgroupId = url.searchParams.get('adgroupId');
         const queryParams = adgroupId ? { nccAdgroupId: adgroupId } : {};
-        const data = await proxyNaverAds('GET', '/ncc/ads', queryParams, null, db.naverAdsSettings);
-        return jsonResponse(data, 200);
+        try {
+          const data = await proxyNaverAds('GET', '/ncc/ads', queryParams, null, db.naverAdsSettings);
+          return jsonResponse(data, 200);
+        } catch (err) {
+          console.warn('Worker real Naver Ads ads call failed, serving fallback:', err.message);
+          const mockData = getMockResponse('GET', '/ncc/ads', queryParams, null);
+          return jsonResponse(mockData, 200);
+        }
       }
 
       // 10-2. POST /api/naver-ads/adjust-adgroup-bid

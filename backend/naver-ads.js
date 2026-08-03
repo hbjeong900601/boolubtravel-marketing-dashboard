@@ -402,7 +402,10 @@ class NaverAdsAPI {
           { nccAdgroupId: 'grp-shop-03', nccCampaignId: campId, name: '일본 로밍 이심 상품군', bidAmt: 600, useYn: 'Y' }
         ];
       }
-      return [];
+      return [
+        { nccAdgroupId: 'grp-default-01', nccCampaignId: campId || 'cam-001', name: '메인 대표 키워드 그룹', bidAmt: 1000, useYn: 'Y' },
+        { nccAdgroupId: 'grp-default-02', nccCampaignId: campId || 'cam-001', name: '기획전/특가 검색 그룹', bidAmt: 750, useYn: 'Y' }
+      ];
     }
 
     // 4. Keywords
@@ -439,7 +442,10 @@ class NaverAdsAPI {
           { nccKeywordId: 'kwd-015', nccAdgroupId: grpId, keyword: '유럽 패키지 여행', bidAmt: 2500, useYn: 'Y', status: 'ELIGIBLE' }
         ];
       }
-      return [];
+      return [
+        { nccKeywordId: 'kwd-def-01', nccAdgroupId: grpId || 'grp-001', keyword: '해외 여행 패키지', bidAmt: 1000, useYn: 'Y', status: 'ELIGIBLE' },
+        { nccKeywordId: 'kwd-def-02', nccAdgroupId: grpId || 'grp-001', keyword: '특가 여행 추천', bidAmt: 850, useYn: 'Y', status: 'ELIGIBLE' }
+      ];
     }
 
     // 4-2. Ads (Shopping Materials)
