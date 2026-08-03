@@ -15,6 +15,20 @@ const TARGET_COMPETITORS = [
 ];
 
 /**
+ * Helper to clean raw ad title into pure searchable product query.
+ */
+function cleanSearchKeyword(rawKeyword) {
+  if (!rawKeyword) return '';
+  let clean = rawKeyword.replace(/\[[^\]]*\]/g, ' ').replace(/\([^\)]*\)/g, ' ');
+  clean = clean.replace(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g, ' ');
+  const words = clean.split(/\s+/).filter(w => w.length > 0);
+  if (words.length > 2) {
+    return words.slice(0, 2).join(' ');
+  }
+  return words.join(' ');
+}
+
+/**
  * Helper to check if a parsed product name somewhat matches the search keyword.
  * This prevents totally unrelated products from being falsely identified as competitors.
  */
@@ -23,7 +37,6 @@ function isProductMatch(keyword, prodName) {
   const keywordTokens = keyword.split(/\s+/).filter(t => t.length > 1);
   if (keywordTokens.length === 0) return true;
   const lowerProdName = prodName.toLowerCase();
-  // Ensure at least one meaningful keyword token is present in the product name
   return keywordTokens.some(token => lowerProdName.includes(token.toLowerCase()));
 }
 
@@ -37,13 +50,15 @@ function isProductMatch(keyword, prodName) {
  * @returns {Promise<Object>} Object containing search query and matched competitors
  */
 async function scrapeNaverShopping(keyword, price, catalogId, openClientId, openClientSecret) {
+  const searchQuery = cleanSearchKeyword(keyword) || keyword;
+
   // If Naver Open API credentials are provided, use the official API!
   if (openClientId && openClientSecret && openClientId !== '••••••••••••••••••••' && openClientSecret !== '••••••••••••••••••••') {
-    console.log(`Using Naver Open API to search for [${keyword}]...`);
+    console.log(`Using Naver Open API to search for cleansed query [${searchQuery}] (Original: [${keyword}])...`);
     try {
       const apiRes = await axios.get('https://openapi.naver.com/v1/search/shop.json', {
         params: {
-          query: keyword,
+          query: searchQuery,
           display: 40,
           sort: 'sim'
         },

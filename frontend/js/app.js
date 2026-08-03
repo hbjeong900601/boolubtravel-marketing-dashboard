@@ -3004,7 +3004,7 @@ function renderCompetitiveTable() {
         </div>
       </td>
       <td style="text-align:center;">
-        <button class="btn-detail-action" onclick="openCompDetailModal(${idx})" style="font-size:11px; padding:4px 8px; margin-bottom:4px; display:block; width:100%;">상세</button>
+        <button class="btn-detail-action" onclick="openCompDetailModal('${item.adId}')" style="font-size:11px; padding:4px 8px; margin-bottom:4px; display:block; width:100%;">상세</button>
         <button class="btn-detail-action" onclick="toggleCompAd('${item.adId}', ${!item.userLock})" style="font-size:11px; padding:4px 8px; display:block; width:100%; background:${item.userLock ? '#ef4444' : '#10b981'}; color:white; border:none;">${item.userLock ? 'OFF' : 'ON'}</button>
       </td>
     </tr>`;
@@ -3029,22 +3029,22 @@ let compModalCurrentItem = null;
 
 window.openCompDetailModal = async function(adIdOrIdx) {
   let item = null;
-  if (typeof adIdOrIdx === 'number' || !isNaN(adIdOrIdx)) {
-    const filter = elements.compStatusFilter.value;
-    const sort = elements.compSortSelect.value;
-    let data = getFilteredCompetitiveData();
-    if (filter !== 'all') data = data.filter(d => d.status === filter);
-    switch (sort) {
-      case 'gap-asc': data.sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity)); break;
-      case 'gap-desc': data.sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)); break;
-      case 'competitors-desc': data.sort((a, b) => b.competitorCount - a.competitorCount); break;
-      case 'name-asc': data.sort((a, b) => a.adName.localeCompare(b.adName)); break;
-    }
-    item = data[adIdOrIdx];
-  } else {
-    item = (state.competitiveData || []).find(d => d.adId === adIdOrIdx);
+  
+  // 1. Strict 1:1 matching by unique adId first!
+  if (adIdOrIdx) {
+    item = (state.competitiveData || []).find(d => String(d.adId) === String(adIdOrIdx));
   }
-  if (!item) return;
+  
+  // 2. Fallback to index if adId fails and it's a numeric index
+  if (!item && (typeof adIdOrIdx === 'number' || (!isNaN(adIdOrIdx) && String(adIdOrIdx).length < 5))) {
+    const data = getFilteredCompetitiveData();
+    item = data[Number(adIdOrIdx)];
+  }
+
+  if (!item) {
+    console.error('Cannot find competitive item for modal:', adIdOrIdx);
+    return;
+  }
   compModalCurrentItem = item;
 
   const modal = document.getElementById('comp-detail-modal');
