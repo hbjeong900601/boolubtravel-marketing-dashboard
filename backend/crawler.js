@@ -74,6 +74,55 @@ async function waitForRateLimit() {
 }
 
 /**
+ * Extract core search keywords from raw ad title.
+ * Removes brackets, parentheses, special symbols, and promotional text.
+ * Keeps meaningful product/destination keywords for accurate Naver Shopping search.
+ * 
+ * Examples:
+ *   "[후쿠오카 출발] 모지코 &가라토시장 & 고쿠라성 & 사라쿠라산 야경 1일 투어"
+ *   → "후쿠오카 출발 모지코 가라토시장 고쿠라성 사라쿠라산 야경 1일 투어"
+ *
+ *   "[한국어가이드] 교토 & 나라 일일 버스 투어 - 기요미즈데라, 후시미이나리 신사"
+ *   → "교토 나라 일일 버스 투어 기요미즈데라 후시미이나리 신사"
+ *
+ *   "[[즉시발권] 빈원더스 나트랑 놀이공원 입장권 + 타타쇼 포함]"
+ *   → "빈원더스 나트랑 놀이공원 입장권 타타쇼"
+ */
+function extractCoreKeywords(rawTitle) {
+  if (!rawTitle) return '';
+  
+  let clean = rawTitle;
+  
+  // 1. Remove bracket/parenthesis SYMBOLS but keep content inside
+  clean = clean.replace(/[\[\](){}]/g, ' ');
+  
+  // 2. Remove special symbols: &, |, ·, -, +, /, \, :, ;, !, ?, =, @, #, $, %, ^, *, ~
+  clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."']/g, ' ');
+  
+  // 3. Remove promotional/noise words that don't help search
+  const noiseWords = [
+    '한국어가이드', '영어가이드', '즉시발권', '단독', '독점', '할인',
+    '최대', '특가', '혜택', '포함', '선택', '가능', '옵션',
+    '단독차량', '단독보트', '프라이빗', '럭셔리',
+    '특정일', '한정', 'Adult', '성인',
+  ];
+  noiseWords.forEach(word => {
+    clean = clean.replace(new RegExp(word, 'gi'), ' ');
+  });
+  
+  // 4. Collapse multiple spaces into one and trim
+  clean = clean.replace(/\s+/g, ' ').trim();
+  
+  // 5. If cleaned result is too long (>60 chars), keep first meaningful chunk
+  const words = clean.split(' ').filter(w => w.length > 0);
+  if (words.length > 8) {
+    clean = words.slice(0, 8).join(' ');
+  }
+  
+  return clean;
+}
+
+/**
  * Scrapes REAL Naver Shopping search results using stealth headless Chrome.
  * NO fake data. NO mock fallback. 100% real data or honest empty result.
  */
@@ -84,10 +133,12 @@ async function scrapeNaverShopping(keyword, price, catalogId) {
 
   await waitForRateLimit();
 
-  const searchQuery = keyword.trim().replace(/\s+/g, ' ');
+  const searchQuery = extractCoreKeywords(keyword);
   const searchUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(searchQuery)}`;
 
-  console.log(`[Crawler] Scraping REAL Naver Shopping: "${searchQuery}"`);
+  console.log(`[Crawler] Original title: "${keyword}"`);
+  console.log(`[Crawler] Extracted keywords: "${searchQuery}"`);
+  console.log(`[Crawler] Search URL: ${searchUrl}`);
 
   let page = null;
   try {
