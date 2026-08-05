@@ -2603,17 +2603,6 @@ let compCountdownInterval = null;
 
 function initCompetitiveAutoScan() {
   loadCachedCompetitiveData();
-  
-  const lastScanTime = localStorage.getItem(COMP_SCAN_TIME_KEY);
-  if (lastScanTime) {
-    const elapsed = Date.now() - parseInt(lastScanTime, 10);
-    if (elapsed >= COMP_SCAN_INTERVAL_MS) {
-      setTimeout(() => runCompetitiveScan(true), 3000);
-    }
-  }
-  
-  setInterval(() => { runCompetitiveScan(true); }, COMP_SCAN_INTERVAL_MS);
-  startCompCountdown();
 }
 
 function loadCachedCompetitiveData() {
@@ -2655,19 +2644,7 @@ function formatScanTime(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
-function startCompCountdown() {
-  if (compCountdownInterval) clearInterval(compCountdownInterval);
-  compCountdownInterval = setInterval(() => {
-    const last = localStorage.getItem(COMP_SCAN_TIME_KEY);
-    if (!last) { elements.compNextScanTime.innerText = '첫 스캔 대기 중...'; return; }
-    const remaining = parseInt(last, 10) + COMP_SCAN_INTERVAL_MS - Date.now();
-    if (remaining <= 0) { elements.compNextScanTime.innerText = '스캔 시작 대기 중...'; return; }
-    const h = Math.floor(remaining / 3600000);
-    const m = Math.floor((remaining % 3600000) / 60000);
-    const s = Math.floor((remaining % 60000) / 1000);
-    elements.compNextScanTime.innerText = `${h}시간 ${m}분 ${s}초 후`;
-  }, 1000);
-}
+// Countdown removed — manual scan only
 
 async function runCompetitiveScan(isAuto = false) {
   if (elements.compScanAllBtn.disabled) return;
@@ -2737,7 +2714,7 @@ async function runCompetitiveScan(isAuto = false) {
   elements.compScanAllBtn.disabled = false;
   elements.compLastScanTime.innerText = formatScanTime(new Date());
   saveCompetitiveDataToCache();
-  startCompCountdown();
+
 
   elements.compExportCsvBtn.disabled = false;
   renderCompetitiveTable();
