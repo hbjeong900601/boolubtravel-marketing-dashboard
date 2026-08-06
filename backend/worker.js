@@ -685,65 +685,84 @@ function parseNextData(html, keyword) {
 }
 
 /**
- * Parse Naver integrated search HTML for shopping data using regex.
- * Works without DOM/browser — extracts from server-rendered HTML and inline JSON.
+ * Parse Naver integrated search HTML for shopping data.
+ * Naver embeds shopping data in: naver.search.ext.newshopping["shopping"]._INITIAL_STATE
+ * This contains productName, mallName, salePrice, discountedSalePrice for each product.
  */
 function parseIntegratedSearchHTML(html) {
   const competitors = [];
 
-  // Strategy 1: Find inline JSON data (Naver SSR often embeds data as JSON)
-  // Look for shopping product data patterns in script tags
-  const scriptBlocks = html.match(/<script[^>]*>([\s\S]*?)<\/script>/g) || [];
-  for (const block of scriptBlocks) {
-    // Look for product data with price and mall info
-    const jsonMatches = block.match(/"productName"\s*:\s*"([^"]+)"[\s\S]*?"price"\s*:\s*"?(\d+)"?[\s\S]*?"mallName"\s*:\s*"([^"]+)"/g);
-    if (jsonMatches) {
-      for (const m of jsonMatches) {
-        const nameMatch = m.match(/"productName"\s*:\s*"([^"]+)"/);
-        const priceMatch = m.match(/"price"\s*:\s*"?(\d+)"?/);
-        const mallMatch = m.match(/"mallName"\s*:\s*"([^"]+)"/);
-        if (nameMatch && priceMatch && mallMatch) {
-          const price = parseInt(priceMatch[1], 10);
-          if (price > 0) {
-            competitors.push({ name: mallMatch[1], productName: nameMatch[1], price, url: 'https://search.shopping.naver.com' });
+  // Strategy 1 (PRIMARY): Extract from _INITIAL_STATE embedded JSON
+  // The data is in: newshopping["shopping"]._INITIAL_STATE = {...}
+  const stateMatch = html.match(/newshopping\["shopping"\]\._INITIAL_STATE\s*=\s*(\{.*)/);
+  if (stateMatch) {
+    const raw = stateMatch[1];
+    // Find matching closing brace by counting depth
+    let depth = 0, end = 0;
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] === '{') depth++;
+      else if (raw[i] === '}') depth--;
+      if (depth === 0) { end = i + 1; break; }
+    }
+    const jsonStr = raw.substring(0, end);
+
+    // Extract parallel arrays via regex (JSON.parse fails due to JS-specific syntax like undefined)
+    const productNames = [];
+    const mallNames = [];
+    const discPrices = [];
+    const salePrices = [];
+
+    let m;
+    const nameRe = /"productName":"(.*?)"/g;
+    while ((m = nameRe.exec(jsonStr)) !== null) productNames.push(m[1]);
+    const mallRe = /"mallName":"(.*?)"/g;
+    while ((m = mallRe.exec(jsonStr)) !== null) mallNames.push(m[1]);
+    const discRe = /"discountedSalePrice":(\d+)/g;
+    while ((m = discRe.exec(jsonStr)) !== null) discPrices.push(parseInt(m[1], 10));
+    const saleRe = /"salePrice":(\d+)/g;
+    while ((m = saleRe.exec(jsonStr)) !== null) salePrices.push(parseInt(m[1], 10));
+
+    const count = Math.min(productNames.length, mallNames.length, Math.max(discPrices.length, salePrices.length));
+    for (let i = 0; i < count; i++) {
+      // Clean HTML markup tags from product names (e.g. \\u003Cmark\\u003E)
+      let name = productNames[i]
+        .replace(/\\u003Cmark\\u003E/g, '')
+        .replace(/\\u003C\\u002Fmark\\u003E/g, '')
+        .replace(/\\u003C\/mark\\u003E/g, '')
+        .replace(/\\u003C[^"]*?\\u003E/g, '');
+      const price = (i < discPrices.length && discPrices[i] > 0) ? discPrices[i] : (i < salePrices.length ? salePrices[i] : 0);
+      if (name && price > 0) {
+        competitors.push({
+          rank: i + 1,
+          name: mallNames[i] || '쇼핑몰',
+          productName: name,
+          price,
+          url: 'https://search.shopping.naver.com'
+        });
+      }
+    }
+  }
+
+  // Strategy 2: Fallback - extract from __APOLLO_STATE__ 
+  if (competitors.length === 0) {
+    const apolloMatch = html.match(/__APOLLO_STATE__\s*=\s*(\{.*?\});\s/);
+    if (apolloMatch) {
+      try {
+        const data = JSON.parse(apolloMatch[1]);
+        for (const [key, val] of Object.entries(data)) {
+          if (val && typeof val === 'object' && val.productName && (val.salePrice || val.discountedSalePrice)) {
+            const price = val.discountedSalePrice || val.salePrice;
+            if (price > 0) {
+              competitors.push({
+                name: val.mallName || '쇼핑몰',
+                productName: val.productName,
+                price: parseInt(price, 10),
+                url: 'https://search.shopping.naver.com'
+              });
+            }
           }
         }
-      }
-    }
-  }
-
-  // Strategy 2: Parse visible HTML shopping items using regex
-  if (competitors.length === 0) {
-    // Match price patterns near product titles in the shopping section
-    // Naver integrated search renders shopping cards with prices like "30,938원" or "30,938"
-    const pricePattern = /data-nclick="[^"]*shp[^"]*"[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>[\s\S]*?(\d{1,3}(?:,\d{3})+)원?/g;
-    let match;
-    while ((match = pricePattern.exec(html)) !== null) {
-      const rawTitle = match[1].replace(/<[^>]+>/g, '').trim();
-      const price = parseInt(match[2].replace(/,/g, ''), 10);
-      if (rawTitle.length > 5 && price > 0) {
-        competitors.push({ name: '쇼핑몰', productName: rawTitle, price, url: 'https://search.shopping.naver.com' });
-      }
-    }
-  }
-
-  // Strategy 3: Generic price extraction from shopping section
-  if (competitors.length === 0) {
-    // Find the shopping section by looking for "가격비교" heading
-    const shopSectionMatch = html.match(/가격비교[\s\S]*?(<ul[\s\S]*?<\/ul>)/);
-    if (shopSectionMatch) {
-      const section = shopSectionMatch[1];
-      // Extract items with price
-      const itemPattern = /<li[^>]*>[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(\d{1,3}(?:,\d{3})+)/g;
-      let itemMatch;
-      while ((itemMatch = itemPattern.exec(section)) !== null) {
-        const url = itemMatch[1];
-        const title = itemMatch[2].replace(/<[^>]+>/g, '').trim();
-        const price = parseInt(itemMatch[3].replace(/,/g, ''), 10);
-        if (title.length > 3 && price > 0) {
-          competitors.push({ name: '쇼핑몰', productName: title, price, url: url.startsWith('http') ? url : 'https://search.shopping.naver.com' });
-        }
-      }
+      } catch (e) { /* ignore parse errors */ }
     }
   }
 
