@@ -5,8 +5,6 @@ compatibility_date = "2024-03-01"
 [vars]
 NODE_ENV = "production"
 
-# Bind a KV Namespace if the user wants persistence in production.
-# To create a KV namespace: wrangler kv:namespace create BOOLUB_DB
-# [[kv_namespaces]]
-# binding = "BOOLUB_DB"
-# id = "your-kv-namespace-id"
+[[kv_namespaces]]
+binding = "BOOLUB_DB"
+id = "7001e5e22f82477dac13082abf008494"
