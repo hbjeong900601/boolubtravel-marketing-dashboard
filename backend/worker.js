@@ -610,29 +610,42 @@ async function runCrawler(keyword, price, catalogId) {
   }
 
   // ──────────────────────────────────────────────
-  // STAGE 2: Naver Integrated Search (search.naver.com)
-  // Different IP blocking policy — typically not blocked
+  // STAGE 2: Naver Integrated Search (with keyword shortening retry)
+  // Try full keyword first, then progressively shorter versions
   // ──────────────────────────────────────────────
-  try {
-    const integratedUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(searchQuery)}`;
-    console.log(`[Worker Crawler] Stage 2: Integrated search fallback...`);
-    const res2 = await fetch(integratedUrl, { headers });
+  const words = searchQuery.split(' ').filter(w => w.length > 0);
+  // Build keyword variants: full → 4 words → 3 words
+  const keywordVariants = [searchQuery];
+  if (words.length > 4) keywordVariants.push(words.slice(0, 4).join(' '));
+  if (words.length > 3) keywordVariants.push(words.slice(0, 3).join(' '));
 
-    if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-    const html2 = await res2.text();
+  for (let ki = 0; ki < keywordVariants.length; ki++) {
+    const currentQuery = keywordVariants[ki];
+    try {
+      const integratedUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(currentQuery)}`;
+      console.log(`[Worker Crawler] Stage 2${ki > 0 ? ` (retry ${ki}, shortened: "${currentQuery}")` : ''}: Integrated search...`);
+      const res2 = await fetch(integratedUrl, { headers });
 
-    const competitors2 = parseIntegratedSearchHTML(html2);
-    if (competitors2.length > 0) {
-      console.log(`[Worker Crawler] ✅ Stage 2 SUCCESS: ${competitors2.length} REAL competitors from integrated search!`);
-      return { success: true, source: 'cloudflare_worker_crawler', competitors: competitors2.sort((a, b) => a.price - b.price) };
+      if (!res2.ok) {
+        console.log(`[Worker Crawler] Stage 2: HTTP ${res2.status}`);
+        continue;
+      }
+      const html2 = await res2.text();
+
+      const competitors2 = parseIntegratedSearchHTML(html2);
+      if (competitors2.length > 0) {
+        console.log(`[Worker Crawler] ✅ Stage 2 SUCCESS: ${competitors2.length} competitors from "${currentQuery}"`);
+        return { success: true, source: 'cloudflare_worker_crawler', competitors: competitors2.sort((a, b) => a.price - b.price) };
+      }
+
+      console.log(`[Worker Crawler] Stage 2: No results for "${currentQuery}"${ki < keywordVariants.length - 1 ? ', trying shorter keyword...' : ''}`);
+    } catch (err) {
+      console.warn(`[Worker Crawler] Stage 2 failed for "${currentQuery}": ${err.message}`);
     }
-
-    console.warn(`[Worker Crawler] ⚠️ Both stages returned no results for "${searchQuery}"`);
-    return { success: true, source: 'no_results', competitors: [] };
-  } catch (err) {
-    console.warn(`[Worker Crawler] ❌ Stage 2 failed: ${err.message}`);
-    return { success: true, source: 'scrape_failed', competitors: [] };
   }
+
+  console.warn(`[Worker Crawler] ⚠️ All stages returned no results for "${searchQuery}"`);
+  return { success: true, source: 'no_results', competitors: [] };
 }
 
 /**
@@ -686,18 +699,18 @@ function parseNextData(html, keyword) {
 
 /**
  * Parse Naver integrated search HTML for shopping data.
- * Naver embeds shopping data in: naver.search.ext.newshopping["shopping"]._INITIAL_STATE
- * This contains productName, mallName, salePrice, discountedSalePrice for each product.
+ * Naver embeds data in different locations depending on product type:
+ *   - Shopping products: newshopping["shopping"]._INITIAL_STATE
+ *   - Travel tickets: __APOLLO_STATE__ with productList (agentName, price)
+ *   - Tour packages: travelSearch.poiAnswer.__CONTEXT__ with pkgTourList
  */
 function parseIntegratedSearchHTML(html) {
   const competitors = [];
 
-  // Strategy 1 (PRIMARY): Extract from _INITIAL_STATE embedded JSON
-  // The data is in: newshopping["shopping"]._INITIAL_STATE = {...}
+  // Strategy 1 (PRIMARY): Extract from newshopping._INITIAL_STATE
   const stateMatch = html.match(/newshopping\["shopping"\]\._INITIAL_STATE\s*=\s*(\{.*)/);
   if (stateMatch) {
     const raw = stateMatch[1];
-    // Find matching closing brace by counting depth
     let depth = 0, end = 0;
     for (let i = 0; i < raw.length; i++) {
       if (raw[i] === '{') depth++;
@@ -706,12 +719,7 @@ function parseIntegratedSearchHTML(html) {
     }
     const jsonStr = raw.substring(0, end);
 
-    // Extract parallel arrays via regex (JSON.parse fails due to JS-specific syntax like undefined)
-    const productNames = [];
-    const mallNames = [];
-    const discPrices = [];
-    const salePrices = [];
-
+    const productNames = [], mallNames = [], discPrices = [], salePrices = [];
     let m;
     const nameRe = /"productName":"(.*?)"/g;
     while ((m = nameRe.exec(jsonStr)) !== null) productNames.push(m[1]);
@@ -724,45 +732,136 @@ function parseIntegratedSearchHTML(html) {
 
     const count = Math.min(productNames.length, mallNames.length, Math.max(discPrices.length, salePrices.length));
     for (let i = 0; i < count; i++) {
-      // Clean HTML markup tags from product names (e.g. \\u003Cmark\\u003E)
       let name = productNames[i]
-        .replace(/\\u003Cmark\\u003E/g, '')
-        .replace(/\\u003C\\u002Fmark\\u003E/g, '')
-        .replace(/\\u003C\/mark\\u003E/g, '')
-        .replace(/\\u003C[^"]*?\\u003E/g, '');
+        .replace(/\\u003Cmark\\u003E/g, '').replace(/\\u003C\\u002Fmark\\u003E/g, '')
+        .replace(/\\u003C\/mark\\u003E/g, '').replace(/\\u003C[^"]*?\\u003E/g, '');
       const price = (i < discPrices.length && discPrices[i] > 0) ? discPrices[i] : (i < salePrices.length ? salePrices[i] : 0);
       if (name && price > 0) {
-        competitors.push({
-          rank: i + 1,
-          name: mallNames[i] || '쇼핑몰',
-          productName: name,
-          price,
-          url: 'https://search.shopping.naver.com'
-        });
+        competitors.push({ rank: i + 1, name: mallNames[i] || '쇼핑몰', productName: name, price, url: 'https://search.shopping.naver.com' });
       }
     }
   }
 
-  // Strategy 2: Fallback - extract from __APOLLO_STATE__ 
+  // Strategy 2: __APOLLO_STATE__ — travel tickets (Disney, USJ, etc.)
+  // Contains productList with productName, price, agentName/brandMallTitle
   if (competitors.length === 0) {
-    const apolloMatch = html.match(/__APOLLO_STATE__\s*=\s*(\{.*?\});\s/);
-    if (apolloMatch) {
-      try {
-        const data = JSON.parse(apolloMatch[1]);
-        for (const [key, val] of Object.entries(data)) {
-          if (val && typeof val === 'object' && val.productName && (val.salePrice || val.discountedSalePrice)) {
-            const price = val.discountedSalePrice || val.salePrice;
-            if (price > 0) {
-              competitors.push({
-                name: val.mallName || '쇼핑몰',
-                productName: val.productName,
-                price: parseInt(price, 10),
-                url: 'https://search.shopping.naver.com'
-              });
-            }
+    const apolloBlocks = html.match(/__APOLLO_STATE__\s*=\s*\{[\s\S]*?\};\s/g) || [];
+    for (const block of apolloBlocks) {
+      // Extract productList section with agentName (travel ticket vendors)
+      const productNames = [], prices = [], agents = [];
+      let m;
+      // Find productList entries - they have productName, price, and agentName nearby
+      const listMatch = block.match(/"productList":\[([\s\S]*?)\]/);
+      if (listMatch) {
+        const listStr = listMatch[1];
+        const pNameRe = /"productName":"(.*?)"/g;
+        while ((m = pNameRe.exec(listStr)) !== null) productNames.push(m[1]);
+        const priceRe = /"price":(\d+)/g;
+        while ((m = priceRe.exec(listStr)) !== null) prices.push(parseInt(m[1], 10));
+        const agentRe = /"agentName":"(.*?)"/g;
+        while ((m = agentRe.exec(listStr)) !== null) agents.push(m[1]);
+        // Also try brandMallTitle as seller name
+        if (agents.length === 0) {
+          const brandRe = /"brandMallTitle":"(.*?)"/g;
+          while ((m = brandRe.exec(listStr)) !== null) agents.push(m[1]);
+        }
+      }
+
+      const count = Math.min(productNames.length, prices.length);
+      for (let i = 0; i < count; i++) {
+        let name = productNames[i]
+          .replace(/\\u003Cmark\\u003E/g, '').replace(/\\u003C\\u002Fmark\\u003E/g, '')
+          .replace(/\\u003C[^"]*?\\u003E/g, '');
+        if (name && prices[i] > 0) {
+          competitors.push({
+            rank: i + 1,
+            name: (i < agents.length && agents[i]) ? agents[i] : '판매처',
+            productName: name,
+            price: prices[i],
+            url: 'https://search.naver.com'
+          });
+        }
+      }
+      if (competitors.length > 0) break;
+    }
+  }
+
+  // Strategy 3: travelSearch.poiAnswer — tour packages (호핑투어, 버스투어, etc.)
+  if (competitors.length === 0) {
+    const travelMatch = html.match(/travelSearch[\s\S]*?pkgTourList":\[([\s\S]*?)\]/);
+    if (travelMatch) {
+      const tourStr = travelMatch[1];
+      const productNames = [], prices = [];
+      let m;
+      const pNameRe = /"productName":"(.*?)"/g;
+      while ((m = pNameRe.exec(tourStr)) !== null) productNames.push(m[1]);
+      const priceRe = /"price":(\d+)/g;
+      while ((m = priceRe.exec(tourStr)) !== null) prices.push(parseInt(m[1], 10));
+      // Try string prices too: "price":"80321"
+      if (prices.length === 0) {
+        const priceRe2 = /"price":"(\d+)"/g;
+        while ((m = priceRe2.exec(tourStr)) !== null) prices.push(parseInt(m[1], 10));
+      }
+
+      const count = Math.min(productNames.length, prices.length);
+      for (let i = 0; i < count; i++) {
+        let name = productNames[i]
+          .replace(/\\u003Cmark\\u003E/g, '').replace(/\\u003C\\u002Fmark\\u003E/g, '')
+          .replace(/\\u003C[^"]*?\\u003E/g, '');
+        if (name && prices[i] > 0) {
+          competitors.push({
+            rank: i + 1,
+            name: '여행사',
+            productName: name,
+            price: prices[i],
+            url: 'https://search.naver.com'
+          });
+        }
+      }
+    }
+  }
+
+  // Strategy 4: Broad fallback — scan ALL script blocks for productName + price patterns
+  if (competitors.length === 0) {
+    const scriptBlocks = html.match(/<script[^>]*>([\s\S]*?)<\/script>/g) || [];
+    for (const block of scriptBlocks) {
+      if (!block.includes('"productName"') || !block.includes('"price"')) continue;
+      
+      const productNames = [], prices = [], sellers = [];
+      let m;
+      const pNameRe = /"productName":"(.*?)"/g;
+      while ((m = pNameRe.exec(block)) !== null) productNames.push(m[1]);
+      const priceRe = /"price":(\d+)/g;
+      while ((m = priceRe.exec(block)) !== null) prices.push(parseInt(m[1], 10));
+      if (prices.length === 0) {
+        const priceRe2 = /"price":"(\d+)"/g;
+        while ((m = priceRe2.exec(block)) !== null) prices.push(parseInt(m[1], 10));
+      }
+      // Try various seller fields
+      for (const field of ['agentName', 'mallName', 'brandMallTitle', 'providerName']) {
+        if (sellers.length > 0) break;
+        const sellerRe = new RegExp(`"${field}":"(.*?)"`, 'g');
+        while ((m = sellerRe.exec(block)) !== null) sellers.push(m[1]);
+      }
+
+      const count = Math.min(productNames.length, prices.length);
+      if (count > 0) {
+        for (let i = 0; i < count && i < 10; i++) {
+          let name = productNames[i]
+            .replace(/\\u003Cmark\\u003E/g, '').replace(/\\u003C\\u002Fmark\\u003E/g, '')
+            .replace(/\\u003C[^"]*?\\u003E/g, '');
+          if (name && prices[i] > 0 && prices[i] < 50000000) {
+            competitors.push({
+              rank: i + 1,
+              name: (i < sellers.length && sellers[i]) ? sellers[i] : '판매처',
+              productName: name,
+              price: prices[i],
+              url: 'https://search.naver.com'
+            });
           }
         }
-      } catch (e) { /* ignore parse errors */ }
+        if (competitors.length > 0) break;
+      }
     }
   }
 
