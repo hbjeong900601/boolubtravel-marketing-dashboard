@@ -546,17 +546,26 @@ function extractCoreKeywords(rawTitle) {
   clean = clean.replace(/[\[\](){}]/g, ' ');
   clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."']/g, ' ');
   const noiseWords = [
-    '한국어가이드', '영어가이드', '즉시발권', '단독', '독점', '할인',
-    '최대', '특가', '혜택', '포함', '선택', '가능', '옵션',
-    '단독차량', '단독보트', '프라이빗', '럭셔리',
-    '특정일', '한정', 'Adult', '성인',
+    // 프로모션/마케팅
+    '한국어가이드', '영어가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
+    '최대', '특가', '혜택', '포함', '선택', '가능', '옵션', '무료취소',
+    '단독차량', '단독보트', '프라이빗', '럭셔리', '프리미엄',
+    '특정일', '한정', 'Adult', '성인', '아동',
+    // 여행 상품 불필요 수식어
+    '출발', '도착', '일일', '당일', '풀데이', '반일', '데이',
+    '편도', '왕복', '오전', '오후', '새벽', '야간',
+    '픽업', '샌딩', '픽드랍', '셔틀', '전용차량',
+    '바우처', '이용권', '이용', '예약', '확정',
+    '무제한', '뷔페', '중식', '석식', '조식',
+    '코스', 'A코스', 'B코스', 'C코스',
   ];
   noiseWords.forEach(word => {
     clean = clean.replace(new RegExp(word, 'gi'), ' ');
   });
   clean = clean.replace(/\s+/g, ' ').trim();
-  const words = clean.split(' ').filter(w => w.length > 0);
-  if (words.length > 8) clean = words.slice(0, 8).join(' ');
+  const words = clean.split(' ').filter(w => w.length > 1); // filter single chars
+  if (words.length > 5) clean = words.slice(0, 5).join(' ');
+  else clean = words.join(' ');
   return clean;
 }
 
@@ -610,42 +619,28 @@ async function runCrawler(keyword, price, catalogId) {
   }
 
   // ──────────────────────────────────────────────
-  // STAGE 2: Naver Integrated Search (with keyword shortening retry)
-  // Try full keyword first, then progressively shorter versions
+  // STAGE 2: Naver Integrated Search (search.naver.com)
   // ──────────────────────────────────────────────
-  const words = searchQuery.split(' ').filter(w => w.length > 0);
-  // Build keyword variants: full → 4 words → 3 words
-  const keywordVariants = [searchQuery];
-  if (words.length > 4) keywordVariants.push(words.slice(0, 4).join(' '));
-  if (words.length > 3) keywordVariants.push(words.slice(0, 3).join(' '));
+  try {
+    const integratedUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(searchQuery)}`;
+    console.log(`[Worker Crawler] Stage 2: Integrated search for "${searchQuery}"...`);
+    const res2 = await fetch(integratedUrl, { headers });
 
-  for (let ki = 0; ki < keywordVariants.length; ki++) {
-    const currentQuery = keywordVariants[ki];
-    try {
-      const integratedUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(currentQuery)}`;
-      console.log(`[Worker Crawler] Stage 2${ki > 0 ? ` (retry ${ki}, shortened: "${currentQuery}")` : ''}: Integrated search...`);
-      const res2 = await fetch(integratedUrl, { headers });
+    if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+    const html2 = await res2.text();
 
-      if (!res2.ok) {
-        console.log(`[Worker Crawler] Stage 2: HTTP ${res2.status}`);
-        continue;
-      }
-      const html2 = await res2.text();
-
-      const competitors2 = parseIntegratedSearchHTML(html2);
-      if (competitors2.length > 0) {
-        console.log(`[Worker Crawler] ✅ Stage 2 SUCCESS: ${competitors2.length} competitors from "${currentQuery}"`);
-        return { success: true, source: 'cloudflare_worker_crawler', competitors: competitors2.sort((a, b) => a.price - b.price) };
-      }
-
-      console.log(`[Worker Crawler] Stage 2: No results for "${currentQuery}"${ki < keywordVariants.length - 1 ? ', trying shorter keyword...' : ''}`);
-    } catch (err) {
-      console.warn(`[Worker Crawler] Stage 2 failed for "${currentQuery}": ${err.message}`);
+    const competitors2 = parseIntegratedSearchHTML(html2);
+    if (competitors2.length > 0) {
+      console.log(`[Worker Crawler] ✅ Stage 2 SUCCESS: ${competitors2.length} competitors`);
+      return { success: true, source: 'cloudflare_worker_crawler', competitors: competitors2.sort((a, b) => a.price - b.price) };
     }
-  }
 
-  console.warn(`[Worker Crawler] ⚠️ All stages returned no results for "${searchQuery}"`);
-  return { success: true, source: 'no_results', competitors: [] };
+    console.warn(`[Worker Crawler] ⚠️ Both stages returned no results for "${searchQuery}"`);
+    return { success: true, source: 'no_results', competitors: [] };
+  } catch (err) {
+    console.warn(`[Worker Crawler] ❌ Stage 2 failed: ${err.message}`);
+    return { success: true, source: 'scrape_failed', competitors: [] };
+  }
 }
 
 /**
