@@ -544,8 +544,8 @@ function extractCoreKeywords(rawTitle) {
   if (!rawTitle) return '';
   let clean = rawTitle;
   clean = clean.replace(/[\[\](){}]/g, ' ');
-  clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."']/g, ' ');
-  // Remove number-based noise patterns: 1박2일, 1대기준, 120분, 3박4일, etc.
+  clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ');
+  // Remove number-based noise patterns
   clean = clean.replace(/\d+박\d+일/g, ' ');
   clean = clean.replace(/\d+일권/g, ' ');
   clean = clean.replace(/\d+대기준/g, ' ');
@@ -553,6 +553,9 @@ function extractCoreKeywords(rawTitle) {
   clean = clean.replace(/\d+시간/g, ' ');
   clean = clean.replace(/\d+인/g, ' ');
   clean = clean.replace(/\d+호선/g, ' ');
+  clean = clean.replace(/\d+가지/g, ' ');
+  // Remove standalone numbers
+  clean = clean.replace(/\b\d+\b/g, ' ');
   const noiseWords = [
     // 프로모션/마케팅
     '한국어가이드', '영어가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
@@ -571,13 +574,28 @@ function extractCoreKeywords(rawTitle) {
     '서비스', '이동', '근교', '시내', '교외',
     '기준', '대기', '선택가능', '마사지선택가능',
     '티켓', '입장권', '바로탑승', '당일사용가능',
+    // 광고 문구/마케팅 수식어
+    '착한가격', '추가비용없는', '추가비용', 'VIP', 'NO팁', 'NO대기비', 'NO지연비',
+    '줄서지', '않고', '빠른', '편리하고', '편리한', '편안하게', '가격동일',
+    '대기없이', '무료', '인기', '베스트셀러', '추천', '필수', '완벽한',
+    '최고의', '특별한', '즐기는', '즐기기',
   ];
   noiseWords.forEach(word => {
     clean = clean.replace(new RegExp(word, 'gi'), ' ');
   });
+  // Remove Korean grammatical suffixes from word endings
+  clean = clean.replace(/부터|까지|에서|으로|로부터/g, ' ');
   clean = clean.replace(/\s+/g, ' ').trim();
-  // Keep Korean single chars (쇼, 권, 탑 etc.) but filter ASCII single chars
-  const words = clean.split(' ').filter(w => w.length > 1 || /[가-힣]/.test(w));
+  // Keep Korean single chars but filter ASCII single chars
+  let words = clean.split(' ').filter(w => w.length > 1 || /[가-힣]/.test(w));
+  // Deduplicate (case-insensitive)
+  const seen = new Set();
+  words = words.filter(w => {
+    const lower = w.toLowerCase();
+    if (seen.has(lower)) return false;
+    seen.add(lower);
+    return true;
+  });
   if (words.length > 4) clean = words.slice(0, 4).join(' ');
   else clean = words.join(' ');
   return clean;
