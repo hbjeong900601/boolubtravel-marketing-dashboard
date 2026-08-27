@@ -2694,20 +2694,54 @@ async function runCompetitiveScan(isAuto = false) {
 
   state.competitiveData = [];
   const total = allAds.length;
+  const SCAN_DELAY = 1500; // 1.5초 간격 (IP 차단 방지)
+  const RETRY_DELAY = 5000; // 재시도 시 5초 대기
+
   for (let i = 0; i < total; i++) {
     const ad = allAds[i];
     elements.compScanProgressFill.style.width = `${Math.round(((i+1)/total)*100)}%`;
     elements.compScanProgressText.innerText = `${i+1} / ${total} 상품 스캔 중...`;
-    try {
-      const res = await resilientFetch(`/api/crawler/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: ad.adId, keyword: ad.adName, price: ad.price, catalogId: '' }) });
-      const data = await res.json();
-      const competitors = (data.product?.competitors || []).filter(c => { const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub'); return !isOwn && c.price > 0; });
-      const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
-      const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
-      const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
-      state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length, data.source), competitorCount: competitors.length, source: data.source || 'unknown', campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: 0 });
-    } catch (err) { console.warn(`Scan failed for ${ad.adName}:`, err.message); }
-    if (i < total - 1) await new Promise(r => setTimeout(r, 3000));
+
+    let competitors = [];
+    let source = 'unknown';
+    let attempts = 0;
+    const maxRetries = 1;
+
+    while (attempts <= maxRetries) {
+      try {
+        const res = await resilientFetch(`/api/crawler/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: ad.adId, keyword: ad.adName, price: ad.price, catalogId: '' }) });
+        const data = await res.json();
+        source = data.source || 'unknown';
+        competitors = (data.product?.competitors || []).filter(c => { const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub'); return !isOwn && c.price > 0; });
+
+        // 데이터 수집 성공 → 반복 종료
+        if (competitors.length > 0 || source === 'cloudflare_worker_crawler' || source === 'puppeteer_real') break;
+
+        // 실패(IP차단/빈결과) 시 재시도
+        if (attempts < maxRetries) {
+          attempts++;
+          elements.compScanProgressText.innerText = `${i+1} / ${total} 재시도 중... (${attempts}/${maxRetries})`;
+          await new Promise(r => setTimeout(r, RETRY_DELAY));
+        } else {
+          break;
+        }
+      } catch (err) {
+        console.warn(`Scan failed for ${ad.adName} (attempt ${attempts+1}):`, err.message);
+        if (attempts < maxRetries) {
+          attempts++;
+          await new Promise(r => setTimeout(r, RETRY_DELAY));
+        } else {
+          break;
+        }
+      }
+    }
+
+    const minCompPrice = competitors.length > 0 ? Math.min(...competitors.map(c => c.price)) : null;
+    const minCompName = competitors.length > 0 ? competitors.find(c => c.price === minCompPrice)?.name || '-' : '-';
+    const gap = minCompPrice !== null ? ad.price - minCompPrice : null;
+    state.competitiveData.push({ adId: ad.adId, adName: ad.adName, price: ad.price, minCompPrice, minCompName, gap, status: getCompetitiveStatus(ad.price, minCompPrice, competitors.length, source), competitorCount: competitors.length, source, campaignId: ad.campaignId, campaignName: ad.campaignName, adgroupId: ad.adgroupId, adgroupName: ad.adgroupName, currentCpc: 0 });
+
+    if (i < total - 1) await new Promise(r => setTimeout(r, SCAN_DELAY));
   }
 
   elements.compScanProgressWrapper.style.display = 'none';
