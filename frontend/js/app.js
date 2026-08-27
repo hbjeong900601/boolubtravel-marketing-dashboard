@@ -2611,6 +2611,11 @@ function loadCachedCompetitiveData() {
     const cachedTime = localStorage.getItem(COMP_SCAN_TIME_KEY);
     if (cached && cachedTime) {
       state.competitiveData = JSON.parse(cached);
+      // Migrate old statuses: close → lowest, unknown → monopoly
+      state.competitiveData.forEach(d => {
+        if (d.status === 'close') d.status = 'lowest';
+        if (d.status === 'unknown') d.status = 'monopoly';
+      });
       elements.compLastScanTime.innerText = formatScanTime(new Date(parseInt(cachedTime, 10)));
       renderCompetitiveTable();
       renderCompetitiveKPIs();
@@ -2945,12 +2950,8 @@ function getRecommendedCpc(item) {
   const currentCpc = item.currentCpc || 0;
   if (item.status === 'lowest') {
     return { value: Math.max(Math.round(currentCpc * 1.2 / 10) * 10, currentCpc + 100, 200), label: '↑ 공격', color: '#00e676', tip: '최저가 우위 → CPC 올려 노출 확대' };
-  } else if (item.status === 'close') {
-    return { value: currentCpc || 150, label: '→ 유지', color: '#ffc107', tip: '경쟁 근접 → 현재 CPC 유지 권장' };
   } else if (item.status === 'disadvantage') {
     return { value: Math.max(Math.round(currentCpc * 0.7 / 10) * 10, 50), label: '↓ 절감', color: '#ff5252', tip: '가격 열위 → CPC 낮춰 비용 절감' };
-  } else if (item.status === 'unknown') {
-    return { value: currentCpc || 100, label: '- 대기', color: '#9e9e9e', tip: '데이터 수집불가 → 재스캔 후 판단' };
   } else {
     return { value: 50, label: '↓ 최소', color: '#a78bfa', tip: '독점 → 최소 입찰가로 효율 운영' };
   }
@@ -2981,7 +2982,7 @@ function renderCompetitiveTable() {
   if (data.length === 0) { elements.compTableTbody.innerHTML = `<tr><td colspan="12" style="text-align:center; opacity:0.5; padding:40px;">필터 조건에 맞는 상품이 없습니다.</td></tr>`; return; }
 
   elements.compTableTbody.innerHTML = data.map((item, idx) => {
-    const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점', unknown: '⚪ 수집불가' };
+    const badgeLabels = { lowest: '🟢 최저가', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
     let gapHtml = item.gap === null ? '<span class="gap-zero">-</span>' : item.gap > 0 ? `<span class="gap-positive">+₩${item.gap.toLocaleString()}</span>` : item.gap < 0 ? `<span class="gap-negative">-₩${Math.abs(item.gap).toLocaleString()}</span>` : '<span class="gap-zero">₩0</span>';
     
     const currentCpc = item.currentCpc || 0;
@@ -3058,7 +3059,7 @@ window.openCompDetailModal = async function(adIdOrIdx) {
   compModalCurrentItem = item;
 
   const modal = document.getElementById('comp-detail-modal');
-  const badgeLabels = { lowest: '🟢 최저가', close: '🟡 근접', disadvantage: '🔴 열위', monopoly: '⭐ 독점', unknown: '⚪ 수집불가' };
+  const badgeLabels = { lowest: '🟢 최저가', disadvantage: '🔴 열위', monopoly: '⭐ 독점' };
   const rec = getRecommendedCpc(item);
 
   document.getElementById('comp-modal-title').innerText = item.adName;
