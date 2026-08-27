@@ -723,33 +723,37 @@ async function runCrawler(keyword, price, catalogId) {
   // STAGE 2.5: Sliding Window Subquery / Single Keyword Suffix Fallback
   // ──────────────────────────────────────────────
   const words = (candidates.primary || '').split(' ').filter(Boolean);
-  let slidingQuery = null;
+  const fallbackQueries = [];
   if (words.length >= 4) {
-    slidingQuery = words.slice(1, 4).join(' '); // e.g. "아테네 올림피아 제우스 신전" -> "올림피아 제우스 신전"
+    fallbackQueries.push(words.slice(1, 4).join(' ')); // e.g. "아테네 올림피아 제우스 신전" -> "올림피아 제우스 신전"
+    fallbackQueries.push(words.slice(0, 2).join(' ') + ' ' + words[words.length - 1]); // e.g. "아테네 제우스 신전"
   } else if (words.length === 1) {
-    slidingQuery = `${words[0]} 투어`; // e.g. "아크로폴리스" -> "아크로폴리스 투어"
+    fallbackQueries.push(`${words[0]} 입장권`); // e.g. "아크로폴리스 입장권"
+    fallbackQueries.push(`${words[0]} 투어`);
   }
 
-  if (slidingQuery && slidingQuery !== primaryQuery && slidingQuery !== coreQuery) {
-    try {
-      const slideUrl = `https://m.search.naver.com/search.naver?query=${encodeURIComponent(slidingQuery)}`;
-      console.log(`[Worker Crawler] Stage 2.5: Sliding query Mobile search for "${slidingQuery}"...`);
-      const resSlide = await fetch(slideUrl, { headers: headersMobile });
+  for (const fq of fallbackQueries) {
+    if (fq && fq !== primaryQuery && fq !== coreQuery) {
+      try {
+        const slideUrl = `https://m.search.naver.com/search.naver?query=${encodeURIComponent(fq)}`;
+        console.log(`[Worker Crawler] Stage 2.5: Fallback query Mobile search for "${fq}"...`);
+        const resSlide = await fetch(slideUrl, { headers: headersMobile });
 
-      if (resSlide.ok) {
-        const htmlSlide = await resSlide.text();
-        const competitors = parseMobileSmartBlockHTML(htmlSlide);
-        if (competitors.length > 0) {
-          console.log(`[Worker Crawler] ✅ Stage 2.5 (Sliding Query) SUCCESS: ${competitors.length} REAL competitors!`);
-          return {
-            success: true,
-            source: 'cloudflare_worker_crawler',
-            competitors: competitors.sort((a, b) => a.price - b.price)
-          };
+        if (resSlide.ok) {
+          const htmlSlide = await resSlide.text();
+          const competitors = parseMobileSmartBlockHTML(htmlSlide);
+          if (competitors.length > 0) {
+            console.log(`[Worker Crawler] ✅ Stage 2.5 ("${fq}") SUCCESS: ${competitors.length} REAL competitors!`);
+            return {
+              success: true,
+              source: 'cloudflare_worker_crawler',
+              competitors: competitors.sort((a, b) => a.price - b.price)
+            };
+          }
         }
+      } catch (e) {
+        console.warn(`[Worker Crawler] Stage 2.5 failed for "${fq}": ${e.message}`);
       }
-    } catch (e) {
-      console.warn(`[Worker Crawler] Stage 2.5 failed: ${e.message}`);
     }
   }
 
