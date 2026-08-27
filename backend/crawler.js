@@ -128,6 +128,7 @@ function generateSearchCandidates(rawTitle) {
     '최고의', '특별한', '즐기는', '즐기기', '한국인전용', '한국인 전용',
     '서비스', '기준', '가이드포함', '가이드 포함', '가이드',
     '액티비티', '체험', '투어상품', '현지투어', '자유여행', '일정', '관광',
+    '반나절', '테마파크', '디스커버리', '센터',
   ];
   for (const word of noiseWords) {
     title = title.replace(new RegExp(word, 'gi'), ' ');
@@ -135,10 +136,10 @@ function generateSearchCandidates(rawTitle) {
 
   // 5. Special delimiter handling for multi-activity products (&, +, /)
   let secondary = null;
-  if (title.includes('&') || title.includes('+')) {
+  if (title.includes('&') || title.includes('+') || title.includes('/')) {
     const destMatch = title.match(/^(나트랑|다낭|푸꾸옥|호치민|하노이|달랏|판랑|무이네|도쿄|오사카|후쿠오카|교토|삿포로|오키나와|방콕|파타야|푸켓|치앙마이|발리|싱가포르|세부|보라카이|보홀|코타키나발루|타이베이|가오슝|홍콩|마카오|괌|사이판|하와이|스위스|인터라켄|파리|런던|로마|바르셀로나|뉴욕|시드니|멜버른|케언즈|브리즈번|올랜도|라스베가스|두바이|아부다비)/);
     const dest = destMatch ? destMatch[1] : '';
-    const parts = title.split(/[&+]/).map(p => p.trim()).filter(Boolean);
+    const parts = title.split(/[&+/]/).map(p => p.trim()).filter(Boolean);
     if (parts.length >= 2) {
       let p1 = parts[0].replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ').replace(/\s+/g, ' ').trim();
       let p2 = parts[1].replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -147,6 +148,9 @@ function generateSearchCandidates(rawTitle) {
       secondary = p2;
     }
   }
+
+  // Remove comma-separated extra sub-locations
+  title = title.replace(/,\s*[^,]+,\s*[^,]+/g, ' ');
 
   title = title.replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ');
   title = title.replace(/\s+/g, ' ').trim();
