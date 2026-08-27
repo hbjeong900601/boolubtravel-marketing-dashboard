@@ -166,7 +166,15 @@ function generateSearchCandidates(rawTitle) {
     }
   }
   const primary = deduped.slice(0, 4).join(' ');
-  const core = deduped.length > 3 ? deduped.slice(0, 3).join(' ') : primary;
+  let core = primary;
+  if (deduped.length >= 3) {
+    const lastWord = deduped[deduped.length - 1];
+    if (['티켓', '입장권', '패스', '투어', '이용권'].includes(lastWord)) {
+      core = deduped.slice(0, deduped.length - 1).join(' ');
+    } else {
+      core = deduped.slice(0, 3).join(' ');
+    }
+  }
 
   return { primary, core, secondary };
 }
