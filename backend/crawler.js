@@ -89,33 +89,35 @@ async function waitForRateLimit() {
  *   → "빈원더스 나트랑 놀이공원 입장권 타타쇼"
  */
 function generateSearchCandidates(rawTitle) {
-  if (!rawTitle) return { primary: '', secondary: null };
+  if (!rawTitle) return { primary: '', core: '', secondary: null };
   let title = rawTitle.trim();
 
   // 1. Remove marketing brackets [...]
-  title = title.replace(/\[\s*(?:한국어가이드|영어가이드|즉시발권|즉시확정|당일사용가능|무료취소|단독|특가|할인|베스트셀러|얼리유후인|히타유후인|우리일행끼리만|부산|KE|노팁|NO팁|모찌특전|출발확정|참좋은여행|다색골프|마닐라|다낭|나트랑|후쿠오카|오사카|도쿄)[^\]]*\]/gi, ' ');
+  title = title.replace(/\[\s*(?:한국어가이드|영어가이드|한국인가이드|즉시발권|즉시확정|당일사용가능|당일사용|무료취소|단독|특가|할인|베스트셀러|얼리유후인|히타유후인|우리일행끼리만|부산|KE|노팁|NO팁|모찌특전|출발확정|참좋은여행|다색골프|마닐라|다낭|나트랑|후쿠오카|오사카|도쿄|시드니|멜버른|프랑스|스위스|타이페이|기차티켓|공항\s*전세밴|QR입장|전자\s*티켓|스냅사진)[^\]]*\]/gi, ' ');
   title = title.replace(/\[[^\]]*\]/g, ' ');
 
   // 2. Remove options/details parentheses (...)
-  title = title.replace(/\(\s*(?:마사지|짐보관|한국인|출발|도착|단독|조인|선택|포함|토탈케어|마사지선택가능|짐보관가능|1대기준|야간|추가비용|픽업|무료취소|즉시확정|성인|아동|A코스|B코스|C코스)[^\)]*\)/gi, ' ');
+  title = title.replace(/\(\s*(?:가이드\s*포함|한국어가이드\s*포함|한국인가이드\s*포함|가이드|마사지|짐보관|한국인|한국인가이드|출발|도착|단독|조인|선택|포함|토탈케어|마사지선택가능|짐보관가능|1대기준|야간|추가비용|픽업|무료취소|즉시확정|성인|아동|A코스|B코스|C코스|구시가지|버즈\s*칼리파\s*뷰|일반\/창가\s*좌석|우선입장|워터파크포함|전문포토그래퍼|호텔\s*샌딩|아리마온천)[^\)]*\)/gi, ' ');
   title = title.replace(/\([^\)]*\)/g, ' ');
 
   // 3. Remove number-based duration/spec patterns
   title = title.replace(/\d+박\s*\d+일/g, ' ');
   title = title.replace(/\d+일권/g, ' ');
+  title = title.replace(/\d+일/g, ' ');
   title = title.replace(/\d+시간/g, ' ');
   title = title.replace(/\d+분/g, ' ');
   title = title.replace(/\d+대기준/g, ' ');
   title = title.replace(/\d+인/g, ' ');
   title = title.replace(/\d+호선/g, ' ');
+  title = title.replace(/\d+개[~]?/g, ' ');
 
   // 4. Remove pure promotional/ad noise words
   const noiseWords = [
-    '한국어가이드', '영어가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
+    '한국어가이드', '영어가이드', '한국인가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
     '최대', '특가', '혜택', '포함', '선택', '가능', '옵션', '무료취소',
     '단독차량', '단독보트', '프라이빗', '럭셔리', '프리미엄',
     '특정일', '한정', 'Adult', '성인', '아동',
-    '출발', '도착', '일일', '당일', '풀데이', '반일', '데이',
+    '출발', '도착', '일일', '당일', '풀데이', '반일', '데이', '종일', '원데이',
     '편도', '왕복', '오전', '오후', '새벽', '야간',
     '바우처', '이용권', '이용', '예약', '확정',
     '무제한', '뷔페', '중식', '석식', '조식',
@@ -124,16 +126,17 @@ function generateSearchCandidates(rawTitle) {
     '줄서지', '않고', '빠른', '편리하고', '편리한', '편안하게', '가격동일',
     '대기없이', '무료', '인기', '베스트셀러', '추천', '필수', '완벽한',
     '최고의', '특별한', '즐기는', '즐기기', '한국인전용', '한국인 전용',
-    '서비스', '기준',
+    '서비스', '기준', '가이드포함', '가이드 포함', '가이드',
+    '액티비티', '체험', '투어상품', '현지투어', '자유여행', '일정', '관광',
   ];
   for (const word of noiseWords) {
     title = title.replace(new RegExp(word, 'gi'), ' ');
   }
 
-  // 5. Special delimiter handling for multi-activity products (&, +)
+  // 5. Special delimiter handling for multi-activity products (&, +, /)
   let secondary = null;
   if (title.includes('&') || title.includes('+')) {
-    const destMatch = title.match(/^(나트랑|다낭|푸꾸옥|호치민|하노이|달랏|판랑|무이네|도쿄|오사카|후쿠오카|교토|삿포로|오키나와|방콕|파타야|푸켓|치앙마이|발리|싱가포르|세부|보라카이|보홀|코타키나발루|타이베이|가오슝|홍콩|마카오|괌|사이판|하와이)/);
+    const destMatch = title.match(/^(나트랑|다낭|푸꾸옥|호치민|하노이|달랏|판랑|무이네|도쿄|오사카|후쿠오카|교토|삿포로|오키나와|방콕|파타야|푸켓|치앙마이|발리|싱가포르|세부|보라카이|보홀|코타키나발루|타이베이|가오슝|홍콩|마카오|괌|사이판|하와이|스위스|인터라켄|파리|런던|로마|바르셀로나|뉴욕|시드니|멜버른|케언즈|브리즈번|올랜도|라스베가스|두바이|아부다비)/);
     const dest = destMatch ? destMatch[1] : '';
     const parts = title.split(/[&+]/).map(p => p.trim()).filter(Boolean);
     if (parts.length >= 2) {
@@ -159,8 +162,9 @@ function generateSearchCandidates(rawTitle) {
     }
   }
   const primary = deduped.slice(0, 4).join(' ');
+  const core = deduped.length > 3 ? deduped.slice(0, 3).join(' ') : primary;
 
-  return { primary, secondary };
+  return { primary, core, secondary };
 }
 
 function extractCoreKeywords(rawTitle) {
