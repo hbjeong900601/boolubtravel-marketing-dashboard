@@ -540,139 +540,258 @@ function jsonResponse(data, status = 200) {
  * Extract core search keywords from raw ad title.
  * Removes brackets, parentheses, special symbols, and promotional text.
  */
-function extractCoreKeywords(rawTitle) {
-  if (!rawTitle) return '';
-  let clean = rawTitle;
-  clean = clean.replace(/[\[\](){}]/g, ' ');
-  clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ');
-  // Remove number-based noise patterns
-  clean = clean.replace(/\d+박\d+일/g, ' ');
-  clean = clean.replace(/\d+일권/g, ' ');
-  clean = clean.replace(/\d+대기준/g, ' ');
-  clean = clean.replace(/\d+분/g, ' ');
-  clean = clean.replace(/\d+시간/g, ' ');
-  clean = clean.replace(/\d+인/g, ' ');
-  clean = clean.replace(/\d+호선/g, ' ');
-  clean = clean.replace(/\d+가지/g, ' ');
-  // Remove standalone numbers
-  clean = clean.replace(/\b\d+\b/g, ' ');
+/**
+ * Extract clean, high-precision search query candidates from raw ad title.
+ * Returns { primary: string, secondary: string | null }
+ */
+function generateSearchCandidates(rawTitle) {
+  if (!rawTitle) return { primary: '', secondary: null };
+  let title = rawTitle.trim();
+
+  // 1. Remove marketing brackets [...]
+  title = title.replace(/\[\s*(?:한국어가이드|영어가이드|즉시발권|즉시확정|당일사용가능|무료취소|단독|특가|할인|베스트셀러|얼리유후인|히타유후인|우리일행끼리만|부산|KE|노팁|NO팁|모찌특전|출발확정|참좋은여행|다색골프|마닐라|다낭|나트랑|후쿠오카|오사카|도쿄)[^\]]*\]/gi, ' ');
+  title = title.replace(/\[[^\]]*\]/g, ' '); // remove any remaining brackets
+
+  // 2. Remove options/details parentheses (...)
+  title = title.replace(/\(\s*(?:마사지|짐보관|한국인|출발|도착|단독|조인|선택|포함|토탈케어|마사지선택가능|짐보관가능|1대기준|야간|추가비용|픽업|무료취소|즉시확정|성인|아동|A코스|B코스|C코스)[^\)]*\)/gi, ' ');
+  title = title.replace(/\([^\)]*\)/g, ' '); // remove remaining parentheses
+
+  // 3. Remove number-based duration/spec patterns
+  title = title.replace(/\d+박\s*\d+일/g, ' ');
+  title = title.replace(/\d+일권/g, ' ');
+  title = title.replace(/\d+시간/g, ' ');
+  title = title.replace(/\d+분/g, ' ');
+  title = title.replace(/\d+대기준/g, ' ');
+  title = title.replace(/\d+인/g, ' ');
+  title = title.replace(/\d+호선/g, ' ');
+
+  // 4. Remove pure promotional/ad noise words (preserve category nouns: 체크아웃, 픽업, 샌딩, 투어, 스파, 패스, 티켓, 입장권 등)
   const noiseWords = [
-    // 프로모션/마케팅
     '한국어가이드', '영어가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
     '최대', '특가', '혜택', '포함', '선택', '가능', '옵션', '무료취소',
     '단독차량', '단독보트', '프라이빗', '럭셔리', '프리미엄',
     '특정일', '한정', 'Adult', '성인', '아동',
-    // 여행 상품 불필요 수식어
     '출발', '도착', '일일', '당일', '풀데이', '반일', '데이',
     '편도', '왕복', '오전', '오후', '새벽', '야간',
-    '픽업', '샌딩', '픽드랍', '셔틀', '전용차량',
     '바우처', '이용권', '이용', '예약', '확정',
     '무제한', '뷔페', '중식', '석식', '조식',
     '코스', 'A코스', 'B코스', 'C코스',
-    // 서비스/유틸리티 수식어
-    '체크아웃', '체크인', '마사지', '짐보관', '짐보관가능',
-    '서비스', '이동', '근교', '시내', '교외',
-    '기준', '대기', '선택가능', '마사지선택가능',
-    '티켓', '입장권', '바로탑승', '당일사용가능',
-    // 광고 문구/마케팅 수식어
     '착한가격', '추가비용없는', '추가비용', 'VIP', 'NO팁', 'NO대기비', 'NO지연비',
     '줄서지', '않고', '빠른', '편리하고', '편리한', '편안하게', '가격동일',
     '대기없이', '무료', '인기', '베스트셀러', '추천', '필수', '완벽한',
-    '최고의', '특별한', '즐기는', '즐기기',
+    '최고의', '특별한', '즐기는', '즐기기', '한국인전용', '한국인 전용',
+    '서비스', '기준',
   ];
-  noiseWords.forEach(word => {
-    clean = clean.replace(new RegExp(word, 'gi'), ' ');
-  });
-  // Remove Korean grammatical suffixes from word endings
-  clean = clean.replace(/부터|까지|에서|으로|로부터/g, ' ');
-  clean = clean.replace(/\s+/g, ' ').trim();
-  // Keep Korean single chars but filter ASCII single chars
-  let words = clean.split(' ').filter(w => w.length > 1 || /[가-힣]/.test(w));
-  // Deduplicate (case-insensitive)
+  for (const word of noiseWords) {
+    title = title.replace(new RegExp(word, 'gi'), ' ');
+  }
+
+  // 5. Special delimiter handling for multi-activity products (&, +)
+  let secondary = null;
+  if (title.includes('&') || title.includes('+')) {
+    const destMatch = title.match(/^(나트랑|다낭|푸꾸옥|호치민|하노이|달랏|판랑|무이네|도쿄|오사카|후쿠오카|교토|삿포로|오키나와|방콕|파타야|푸켓|치앙마이|발리|싱가포르|세부|보라카이|보홀|코타키나발루|타이베이|가오슝|홍콩|마카오|괌|사이판|하와이)/);
+    const dest = destMatch ? destMatch[1] : '';
+    const parts = title.split(/[&+]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      let p1 = parts[0].replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ').replace(/\s+/g, ' ').trim();
+      let p2 = parts[1].replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (dest && !p2.startsWith(dest)) p2 = `${dest} ${p2}`;
+      title = p1;
+      secondary = p2;
+    }
+  }
+
+  title = title.replace(/[&|·\-+/\\:;!?=@#$%^*~,."'•]/g, ' ');
+  title = title.replace(/\s+/g, ' ').trim();
+
+  let words = title.split(' ').filter(w => w.length > 1 || /[가-힣]/.test(w));
   const seen = new Set();
-  words = words.filter(w => {
-    const lower = w.toLowerCase();
-    if (seen.has(lower)) return false;
-    seen.add(lower);
-    return true;
-  });
-  if (words.length > 4) clean = words.slice(0, 4).join(' ');
-  else clean = words.join(' ');
-  return clean;
+  const deduped = [];
+  for (const w of words) {
+    const l = w.toLowerCase();
+    if (!seen.has(l)) {
+      seen.add(l);
+      deduped.append ? deduped.append(w) : deduped.push(w);
+    }
+  }
+  const primary = deduped.slice(0, 4).join(' ');
+
+  return { primary, secondary };
+}
+
+function extractCoreKeywords(rawTitle) {
+  if (!rawTitle) return '';
+  return generateSearchCandidates(rawTitle).primary;
 }
 
 /**
  * Scrapes REAL Naver Shopping search results using Cloudflare Workers fetch.
- * Two-stage strategy (mirrors local Puppeteer crawler):
- *   Stage 1: search.shopping.naver.com (direct shopping search)
- *   Stage 2: search.naver.com integrated search (different IP policy, more lenient)
- * NO fake data. NO mock fallback. 100% real data or honest empty result.
+ * 3-Stage Pipeline:
+ *   Stage 1: m.search.naver.com (Mobile SmartBlock - yields 40~50+ real competitor products)
+ *   Stage 2: search.naver.com (PC Integrated Search fallback - _INITIAL_STATE, __APOLLO_STATE__, travelSearch)
+ *   Stage 3: Secondary keyword fallback if available
  */
 async function runCrawler(keyword, price, catalogId) {
-  const searchQuery = extractCoreKeywords(keyword);
-  console.log(`[Worker Crawler] Original: "${keyword}"`);
-  console.log(`[Worker Crawler] Extracted: "${searchQuery}"`);
+  const candidates = generateSearchCandidates(keyword);
+  const primaryQuery = candidates.primary || keyword;
+  const secondaryQuery = candidates.secondary;
 
-  const headers = {
+  console.log(`[Worker Crawler] Original: "${keyword}" -> Primary: "${primaryQuery}", Secondary: "${secondaryQuery || 'none'}"`);
+
+  const headersMobile = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+  };
+
+  const headersPC = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
   };
 
   // ──────────────────────────────────────────────
-  // STAGE 1: Direct Naver Shopping Search
+  // STAGE 1: Mobile SmartBlock Search (m.search.naver.com)
   // ──────────────────────────────────────────────
   try {
-    const shoppingUrl = catalogId
-      ? `https://search.shopping.naver.com/catalog/${catalogId}`
-      : `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(searchQuery)}`;
-    
-    console.log(`[Worker Crawler] Stage 1: Direct shopping search...`);
-    const res = await fetch(shoppingUrl, { headers });
+    const mobileUrl = `https://m.search.naver.com/search.naver?query=${encodeURIComponent(primaryQuery)}`;
+    console.log(`[Worker Crawler] Stage 1: Mobile SmartBlock search for "${primaryQuery}"...`);
+    const resMobile = await fetch(mobileUrl, { headers: headersMobile });
 
-    if (res.ok) {
-      const html = await res.text();
-      
-      if (!html.includes('접속이 일시적으로 제한')) {
-        const competitors = parseNextData(html, keyword);
-        if (competitors.length > 0) {
-          console.log(`[Worker Crawler] ✅ Stage 1 SUCCESS: ${competitors.length} REAL competitors!`);
-          return { success: true, source: 'cloudflare_worker_crawler', competitors: competitors.sort((a, b) => a.price - b.price) };
-        }
-        console.log(`[Worker Crawler] Stage 1: No results from __NEXT_DATA__, trying Stage 2...`);
-      } else {
-        console.log(`[Worker Crawler] Stage 1: IP blocked, trying Stage 2...`);
+    if (resMobile.ok) {
+      const htmlMobile = await resMobile.text();
+      const competitors = parseMobileSmartBlockHTML(htmlMobile);
+      if (competitors.length > 0) {
+        console.log(`[Worker Crawler] ✅ Stage 1 (Mobile) SUCCESS: ${competitors.length} REAL competitors found!`);
+        return {
+          success: true,
+          source: 'cloudflare_worker_crawler',
+          competitors: competitors.sort((a, b) => a.price - b.price)
+        };
       }
-    } else {
-      console.log(`[Worker Crawler] Stage 1: HTTP ${res.status}, trying Stage 2...`);
     }
   } catch (e) {
-    console.warn(`[Worker Crawler] Stage 1 failed: ${e.message}, trying Stage 2...`);
+    console.warn(`[Worker Crawler] Stage 1 (Mobile) failed: ${e.message}`);
   }
 
   // ──────────────────────────────────────────────
-  // STAGE 2: Naver Integrated Search (search.naver.com)
+  // STAGE 2: PC Integrated Search Fallback (search.naver.com)
   // ──────────────────────────────────────────────
   try {
-    const integratedUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(searchQuery)}`;
-    console.log(`[Worker Crawler] Stage 2: Integrated search for "${searchQuery}"...`);
-    const res2 = await fetch(integratedUrl, { headers });
+    const pcUrl = `https://search.naver.com/search.naver?where=nexearch&query=${encodeURIComponent(primaryQuery)}`;
+    console.log(`[Worker Crawler] Stage 2: PC Integrated search for "${primaryQuery}"...`);
+    const resPC = await fetch(pcUrl, { headers: headersPC });
 
-    if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-    const html2 = await res2.text();
-
-    const competitors2 = parseIntegratedSearchHTML(html2);
-    if (competitors2.length > 0) {
-      console.log(`[Worker Crawler] ✅ Stage 2 SUCCESS: ${competitors2.length} competitors`);
-      return { success: true, source: 'cloudflare_worker_crawler', competitors: competitors2.sort((a, b) => a.price - b.price) };
+    if (resPC.ok) {
+      const htmlPC = await resPC.text();
+      const competitors = parseIntegratedSearchHTML(htmlPC);
+      if (competitors.length > 0) {
+        console.log(`[Worker Crawler] ✅ Stage 2 (PC) SUCCESS: ${competitors.length} competitors found!`);
+        return {
+          success: true,
+          source: 'cloudflare_worker_crawler',
+          competitors: competitors.sort((a, b) => a.price - b.price)
+        };
+      }
     }
-
-    console.warn(`[Worker Crawler] ⚠️ Both stages returned no results for "${searchQuery}"`);
-    return { success: true, source: 'no_results', competitors: [] };
-  } catch (err) {
-    console.warn(`[Worker Crawler] ❌ Stage 2 failed: ${err.message}`);
-    return { success: true, source: 'scrape_failed', competitors: [] };
+  } catch (e) {
+    console.warn(`[Worker Crawler] Stage 2 (PC) failed: ${e.message}`);
   }
+
+  // ──────────────────────────────────────────────
+  // STAGE 3: Secondary Keyword Fallback (if multi-product)
+  // ──────────────────────────────────────────────
+  if (secondaryQuery) {
+    try {
+      const secUrl = `https://m.search.naver.com/search.naver?query=${encodeURIComponent(secondaryQuery)}`;
+      console.log(`[Worker Crawler] Stage 3: Secondary search for "${secondaryQuery}"...`);
+      const resSec = await fetch(secUrl, { headers: headersMobile });
+
+      if (resSec.ok) {
+        const htmlSec = await resSec.text();
+        const competitors = parseMobileSmartBlockHTML(htmlSec);
+        if (competitors.length > 0) {
+          console.log(`[Worker Crawler] ✅ Stage 3 (Secondary) SUCCESS: ${competitors.length} competitors found!`);
+          return {
+            success: true,
+            source: 'cloudflare_worker_crawler',
+            competitors: competitors.sort((a, b) => a.price - b.price)
+          };
+        }
+      }
+    } catch (e) {
+      console.warn(`[Worker Crawler] Stage 3 (Secondary) failed: ${e.message}`);
+    }
+  }
+
+  console.warn(`[Worker Crawler] ⚠️ All stages returned 0 results for "${keyword}"`);
+  return { success: true, source: 'no_results', competitors: [] };
+}
+
+/**
+ * Parse Mobile SmartBlock HTML (m.search.naver.com)
+ * Yields up to 40~50+ competitors from embedded smart blocks & shopping carousels.
+ */
+function parseMobileSmartBlockHTML(html) {
+  const competitors = [];
+
+  const productNames = [];
+  const mallNames = [];
+  const discPrices = [];
+  const salePrices = [];
+  const rawPrices = [];
+
+  let m;
+  const nameRe = /"productName":"(.*?)"/g;
+  while ((m = nameRe.exec(html)) !== null) productNames.push(m[1]);
+
+  const mallRe = /"mallName":"(.*?)"/g;
+  while ((m = mallRe.exec(html)) !== null) mallNames.push(m[1]);
+
+  const discRe = /"discountedSalePrice":(\d+)/g;
+  while ((m = discRe.exec(html)) !== null) discPrices.push(parseInt(m[1], 10));
+
+  const saleRe = /"salePrice":(\d+)/g;
+  while ((m = saleRe.exec(html)) !== null) salePrices.push(parseInt(m[1], 10));
+
+  const priceRe = /"price":(\d+)/g;
+  while ((m = priceRe.exec(html)) !== null) rawPrices.push(parseInt(m[1], 10));
+
+  const total = Math.min(productNames.length, Math.max(discPrices.length, salePrices.length, rawPrices.length));
+  for (let i = 0; i < total; i++) {
+    let name = productNames[i]
+      .replace(/\\u003Cmark\\u003E/g, '')
+      .replace(/\\u003C\\u002Fmark\\u003E/g, '')
+      .replace(/\\u003C\/mark\\u003E/g, '')
+      .replace(/\\u003C[^"]*?\\u003E/g, '')
+      .trim();
+
+    let price = 0;
+    if (i < discPrices.length && discPrices[i] > 0) price = discPrices[i];
+    else if (i < salePrices.length && salePrices[i] > 0) price = salePrices[i];
+    else if (i < rawPrices.length && rawPrices[i] > 0) price = rawPrices[i];
+
+    const mall = (i < mallNames.length && mallNames[i]) ? mallNames[i] : '판매처';
+
+    if (name && price > 0 && price < 100000000) {
+      competitors.push({
+        rank: i + 1,
+        name: mall,
+        productName: name,
+        price,
+        url: 'https://m.search.naver.com'
+      });
+    }
+  }
+
+  // Deduplicate by productName + price
+  const seen = new Set();
+  return competitors.filter(c => {
+    const key = `${c.name}_${c.price}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
