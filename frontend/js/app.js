@@ -5,10 +5,9 @@
 
 // Dynamically resolve backend API URL
 const WORKERS_FALLBACK = 'https://boolubtravel-marketing-backend.je3899.workers.dev';
-let API_BASE = localStorage.getItem('boolub_backend_url') || 
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : WORKERS_FALLBACK);
+let API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? (localStorage.getItem('boolub_backend_url') || 'http://localhost:3000')
+  : WORKERS_FALLBACK;
 
 if (API_BASE && API_BASE.endsWith('/')) {
   API_BASE = API_BASE.slice(0, -1);
