@@ -93,26 +93,35 @@ function extractCoreKeywords(rawTitle) {
   let clean = rawTitle;
   clean = clean.replace(/[\[\](){}]/g, ' ');
   clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."']/g, ' ');
+  clean = clean.replace(/\d+박\d+일/g, ' ');
+  clean = clean.replace(/\d+일권/g, ' ');
+  clean = clean.replace(/\d+대기준/g, ' ');
+  clean = clean.replace(/\d+분/g, ' ');
+  clean = clean.replace(/\d+시간/g, ' ');
+  clean = clean.replace(/\d+인/g, ' ');
+  clean = clean.replace(/\d+호선/g, ' ');
   const noiseWords = [
-    // 프로모션/마케팅
     '한국어가이드', '영어가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
     '최대', '특가', '혜택', '포함', '선택', '가능', '옵션', '무료취소',
     '단독차량', '단독보트', '프라이빗', '럭셔리', '프리미엄',
     '특정일', '한정', 'Adult', '성인', '아동',
-    // 여행 상품 불필요 수식어
     '출발', '도착', '일일', '당일', '풀데이', '반일', '데이',
     '편도', '왕복', '오전', '오후', '새벽', '야간',
     '픽업', '샌딩', '픽드랍', '셔틀', '전용차량',
     '바우처', '이용권', '이용', '예약', '확정',
     '무제한', '뷔페', '중식', '석식', '조식',
     '코스', 'A코스', 'B코스', 'C코스',
+    '체크아웃', '체크인', '마사지', '짐보관', '짐보관가능',
+    '서비스', '이동', '근교', '시내', '교외',
+    '기준', '대기', '선택가능', '마사지선택가능',
+    '티켓', '입장권', '바로탑승', '당일사용가능',
   ];
   noiseWords.forEach(word => {
     clean = clean.replace(new RegExp(word, 'gi'), ' ');
   });
   clean = clean.replace(/\s+/g, ' ').trim();
-  const words = clean.split(' ').filter(w => w.length > 1);
-  if (words.length > 5) clean = words.slice(0, 5).join(' ');
+  const words = clean.split(' ').filter(w => w.length > 1 || /[가-힣]/.test(w));
+  if (words.length > 4) clean = words.slice(0, 4).join(' ');
   else clean = words.join(' ');
   return clean;
 }

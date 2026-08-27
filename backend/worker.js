@@ -545,6 +545,14 @@ function extractCoreKeywords(rawTitle) {
   let clean = rawTitle;
   clean = clean.replace(/[\[\](){}]/g, ' ');
   clean = clean.replace(/[&|·\-+/\\:;!?=@#$%^*~,."']/g, ' ');
+  // Remove number-based noise patterns: 1박2일, 1대기준, 120분, 3박4일, etc.
+  clean = clean.replace(/\d+박\d+일/g, ' ');
+  clean = clean.replace(/\d+일권/g, ' ');
+  clean = clean.replace(/\d+대기준/g, ' ');
+  clean = clean.replace(/\d+분/g, ' ');
+  clean = clean.replace(/\d+시간/g, ' ');
+  clean = clean.replace(/\d+인/g, ' ');
+  clean = clean.replace(/\d+호선/g, ' ');
   const noiseWords = [
     // 프로모션/마케팅
     '한국어가이드', '영어가이드', '즉시발권', '즉시확정', '단독', '독점', '할인',
@@ -558,13 +566,19 @@ function extractCoreKeywords(rawTitle) {
     '바우처', '이용권', '이용', '예약', '확정',
     '무제한', '뷔페', '중식', '석식', '조식',
     '코스', 'A코스', 'B코스', 'C코스',
+    // 서비스/유틸리티 수식어
+    '체크아웃', '체크인', '마사지', '짐보관', '짐보관가능',
+    '서비스', '이동', '근교', '시내', '교외',
+    '기준', '대기', '선택가능', '마사지선택가능',
+    '티켓', '입장권', '바로탑승', '당일사용가능',
   ];
   noiseWords.forEach(word => {
     clean = clean.replace(new RegExp(word, 'gi'), ' ');
   });
   clean = clean.replace(/\s+/g, ' ').trim();
-  const words = clean.split(' ').filter(w => w.length > 1); // filter single chars
-  if (words.length > 5) clean = words.slice(0, 5).join(' ');
+  // Keep Korean single chars (쇼, 권, 탑 etc.) but filter ASCII single chars
+  const words = clean.split(' ').filter(w => w.length > 1 || /[가-힣]/.test(w));
+  if (words.length > 4) clean = words.slice(0, 4).join(' ');
   else clean = words.join(' ');
   return clean;
 }
