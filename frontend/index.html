@@ -932,7 +932,7 @@
 
   <!-- COMPETITIVE DETAIL MODAL -->
   <div class="modal-overlay" id="comp-detail-modal" style="display:none;">
-    <div class="modal-content" style="max-width:720px; max-height:90vh; overflow-y:auto;">
+    <div class="modal-content" style="max-width:880px; max-height:90vh; overflow-y:auto;">
       <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 id="comp-modal-title" style="margin:0; font-size:16px;">상품 경쟁력 상세</h3>
         <button onclick="closeCompDetailModal()" style="background:none; border:none; color:rgba(255,255,255,0.6); font-size:20px; cursor:pointer; padding:4px;">&times;</button>
@@ -990,19 +990,20 @@
 
       <!-- Competitors Table -->
       <div style="font-size:13px; font-weight:600; margin-bottom:8px;">🏪 경쟁 업체 가격 비교 (<span id="comp-modal-comp-count">0</span>개)</div>
-      <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+      <div class="table-responsive" style="max-height:360px; overflow-y:auto;">
         <table>
           <thead>
             <tr>
-              <th style="width:40px;">순위</th>
-              <th>업체명</th>
-              <th>판매가</th>
-              <th>가격 차이</th>
-              <th>상태</th>
+              <th style="width:40px; text-align:center;">순위</th>
+              <th style="width:110px;">업체명</th>
+              <th>경쟁 상품명</th>
+              <th style="width:100px; text-align:right;">판매가</th>
+              <th style="width:110px; text-align:right;">가격 차이</th>
+              <th style="width:60px; text-align:center;">상태</th>
             </tr>
           </thead>
           <tbody id="comp-modal-competitors-tbody">
-            <tr><td colspan="5" style="text-align:center; opacity:0.5; padding:20px;">데이터 없음</td></tr>
+            <tr><td colspan="6" style="text-align:center; opacity:0.5; padding:20px;">데이터 없음</td></tr>
           </tbody>
         </table>
       </div>
@@ -1016,6 +1017,6 @@
   </div>
 
   <!-- Dashboard Main JS Script -->
-  <script src="js/app.js?v=9.9"></script>
+  <script src="js/app.js?v=10.0"></script>
 </body>
 </html>

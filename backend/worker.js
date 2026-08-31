@@ -813,61 +813,82 @@ async function runCrawler(keyword, price, catalogId) {
 
 /**
  * Parse Mobile SmartBlock HTML (m.search.naver.com)
- * Yields up to 40~50+ competitors from embedded smart blocks & shopping carousels.
+ * Uses card-level chunk parsing so mallName, productName, price, and url are 100% paired with zero index shifts.
  */
 function parseMobileSmartBlockHTML(html) {
   const competitors = [];
+  if (!html) return competitors;
 
-  const productNames = [];
-  const mallNames = [];
-  const discPrices = [];
-  const salePrices = [];
-  const rawPrices = [];
+  // Split HTML into individual product card chunks
+  const cards = html.split(/(?:\"cardType\":\"ORGANIC_CARD\"|\"cardType\":\"AD_CARD\"|\"sasType\":\"SHOPPING\"|\"channelProductId\":)/);
+  
+  if (cards.length > 1) {
+    for (let i = 1; i < cards.length; i++) {
+      const chunk = cards[i];
 
-  let m;
-  const nameRe = /"productName":"(.*?)"/g;
-  while ((m = nameRe.exec(html)) !== null) productNames.push(m[1]);
+      // 1. Extract productName
+      const nameMatch = chunk.match(/\"productName\":\"(.*?)\"/);
+      if (!nameMatch) continue;
 
-  const mallRe = /"mallName":"(.*?)"/g;
-  while ((m = mallRe.exec(html)) !== null) mallNames.push(m[1]);
+      let name = nameMatch[1]
+        .replace(/\\u003Cmark\\u003E/gi, '')
+        .replace(/\\u003C\\u002Fmark\\u003E/gi, '')
+        .replace(/\\u003C\/mark\\u003E/gi, '')
+        .replace(/\\u003C[^>]*?\\u003E/gi, '')
+        .replace(/\\"/g, '"')
+        .trim();
 
-  const discRe = /"discountedSalePrice":(\d+)/g;
-  while ((m = discRe.exec(html)) !== null) discPrices.push(parseInt(m[1], 10));
+      // 2. Extract accurate mallName (strictly within this card chunk)
+      let mall = '';
+      const mallMatch = chunk.match(/\"mallName\":\"(.*?)\"/);
+      if (mallMatch && mallMatch[1] && mallMatch[1] !== 'undefined') {
+        mall = mallMatch[1];
+      } else {
+        const channelMatch = chunk.match(/\"channelName\":\"(.*?)\"/);
+        if (channelMatch && channelMatch[1]) {
+          mall = channelMatch[1];
+        } else {
+          const shopMatch = chunk.match(/\"(?:shopName|sellerName|mallTitle)\":\"(.*?)\"/);
+          if (shopMatch && shopMatch[1]) mall = shopMatch[1];
+        }
+      }
+      mall = mall.replace(/\\"/g, '"').trim();
+      if (!mall) mall = '네이버 쇼핑몰';
 
-  const saleRe = /"salePrice":(\d+)/g;
-  while ((m = saleRe.exec(html)) !== null) salePrices.push(parseInt(m[1], 10));
+      // 3. Extract price (strictly within this card chunk)
+      let price = 0;
+      const discMatch = chunk.match(/\"discountedSalePrice\":(\d+)/);
+      const saleMatch = chunk.match(/\"salePrice\":(\d+)/);
+      const rawPriceMatch = chunk.match(/\"price\":(\d+)/);
 
-  const priceRe = /"price":(\d+)/g;
-  while ((m = priceRe.exec(html)) !== null) rawPrices.push(parseInt(m[1], 10));
+      if (discMatch && parseInt(discMatch[1], 10) > 0) {
+        price = parseInt(discMatch[1], 10);
+      } else if (saleMatch && parseInt(saleMatch[1], 10) > 0) {
+        price = parseInt(saleMatch[1], 10);
+      } else if (rawPriceMatch && parseInt(rawPriceMatch[1], 10) > 0) {
+        price = parseInt(rawPriceMatch[1], 10);
+      }
 
-  const total = Math.min(productNames.length, Math.max(discPrices.length, salePrices.length, rawPrices.length));
-  for (let i = 0; i < total; i++) {
-    let name = productNames[i]
-      .replace(/\\u003Cmark\\u003E/g, '')
-      .replace(/\\u003C\\u002Fmark\\u003E/g, '')
-      .replace(/\\u003C\/mark\\u003E/g, '')
-      .replace(/\\u003C[^"]*?\\u003E/g, '')
-      .trim();
+      // 4. Extract product URL
+      let url = 'https://m.search.naver.com';
+      const pcUrlMatch = chunk.match(/\"(?:pcUrl|mobileUrl|productClickUrl)\":\"(.*?)\"/);
+      if (pcUrlMatch && pcUrlMatch[1]) {
+        url = pcUrlMatch[1].replace(/\\u002F/g, '/').replace(/\\"/g, '"');
+      }
 
-    let price = 0;
-    if (i < discPrices.length && discPrices[i] > 0) price = discPrices[i];
-    else if (i < salePrices.length && salePrices[i] > 0) price = salePrices[i];
-    else if (i < rawPrices.length && rawPrices[i] > 0) price = rawPrices[i];
-
-    const mall = (i < mallNames.length && mallNames[i]) ? mallNames[i] : '판매처';
-
-    if (name && price > 0 && price < 100000000) {
-      competitors.push({
-        rank: i + 1,
-        name: mall,
-        productName: name,
-        price,
-        url: 'https://m.search.naver.com'
-      });
+      if (name && price > 0 && price < 100000000) {
+        competitors.push({
+          rank: competitors.length + 1,
+          name: mall,
+          productName: name,
+          price,
+          url
+        });
+      }
     }
   }
 
-  // Deduplicate by productName + price
+  // Deduplicate by mall + price
   const seen = new Set();
   return competitors.filter(c => {
     const key = `${c.name}_${c.price}`;

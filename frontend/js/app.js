@@ -3152,7 +3152,7 @@ window.openCompDetailModal = async function(adIdOrIdx) {
     }
 
     if (competitors.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; opacity:0.5; padding:20px;">경쟁 업체 데이터가 없습니다.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; opacity:0.5; padding:20px;">경쟁 업체 데이터가 없습니다.</td></tr>';
     } else {
       competitors.sort((a, b) => a.price - b.price);
       tbody.innerHTML = competitors.map((c, i) => {
@@ -3160,17 +3160,24 @@ window.openCompDetailModal = async function(adIdOrIdx) {
         const isOwn = c.name.includes('부럽') || c.name.includes('자사') || c.name.toLowerCase().includes('boolub');
         const statusLabel = isOwn ? '<span style="color:#a78bfa; font-weight:600;">자사</span>' : diff > 0 ? '<span style="color:#ff5252;">열위</span>' : diff < 0 ? '<span style="color:#00e676;">우위</span>' : '<span style="color:#ffc107;">동일</span>';
         const diffHtml = diff > 0 ? `<span class="gap-positive">+₩${diff.toLocaleString()}</span>` : diff < 0 ? `<span class="gap-negative">-₩${Math.abs(diff).toLocaleString()}</span>` : '<span class="gap-zero">₩0</span>';
+        
+        const prodTitle = c.productName || item.adName;
+        const prodLinkHtml = c.url && c.url.startsWith('http')
+          ? `<a href="${c.url}" target="_blank" rel="noopener noreferrer" style="color:rgba(255,255,255,0.85); text-decoration:none; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:12px;" onmouseover="this.style.color='var(--color-naver)'" onmouseout="this.style.color='rgba(255,255,255,0.85)'">${prodTitle} 🔗</a>`
+          : `<span style="font-size:12px; color:rgba(255,255,255,0.8);">${prodTitle}</span>`;
+
         return `<tr style="${isOwn ? 'background:rgba(167,139,250,0.1);' : ''}">
           <td style="text-align:center; font-weight:600;">${i + 1}</td>
-          <td style="font-size:12px;${isOwn ? ' color:#a78bfa; font-weight:600;' : ''}">${c.name}${isOwn ? ' ⭐' : ''}</td>
-          <td style="font-weight:600;">₩${c.price.toLocaleString()}</td>
-          <td>${diffHtml}</td>
-          <td>${statusLabel}</td>
+          <td style="font-size:13px; font-weight:600;${isOwn ? ' color:#a78bfa;' : ' color:#e2e8f0;'}">${c.name}${isOwn ? ' ⭐' : ''}</td>
+          <td style="max-width:320px; line-height:1.4;">${prodLinkHtml}</td>
+          <td style="font-weight:600; text-align:right; font-size:13px;">₩${c.price.toLocaleString()}</td>
+          <td style="text-align:right;">${diffHtml}</td>
+          <td style="text-align:center;">${statusLabel}</td>
         </tr>`;
       }).join('');
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#ff5252; padding:20px;">조회 실패: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ff5252; padding:20px;">조회 실패: ${err.message}</td></tr>`;
   }
 };
 
